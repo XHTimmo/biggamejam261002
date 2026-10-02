@@ -52,7 +52,8 @@ func _add_key_action(action: StringName, keycode: int) -> void:
 
 func _build_world() -> void:
 	# Main floor and the stepping-stone route through the lab.
-	_create_platform(Rect2(580, 610, 1160, 76), Color("#2d3f5c"))
+	# Full-width floor also covers the spawn area at the far left of the lab.
+	_create_platform(Rect2(0, 610, 1700, 76), Color("#2d3f5c"))
 	_create_platform(Rect2(220, 475, 220, 24), Color("#49627f"))
 	_create_platform(Rect2(515, 390, 180, 24), Color("#49627f"))
 	_create_platform(Rect2(790, 465, 170, 24), Color("#49627f"))
