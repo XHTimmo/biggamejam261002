@@ -43,15 +43,14 @@ func _ensure_input_actions() -> void:
 	_add_key_action("move_left", KEY_LEFT)
 	_add_key_action("move_right", KEY_D)
 	_add_key_action("move_right", KEY_RIGHT)
-	_add_key_action("jump", KEY_SPACE)
-	_add_key_action("jump", KEY_W)
-	_add_key_action("jump", KEY_UP)
+	_add_key_action("jump", KEY_K)
 	_add_key_action("use_acid", KEY_Q)
 	_add_key_action("reset_demo", KEY_R)
 	_add_key_action("oxygen_normal", KEY_J)
-	_add_key_action("oxygen_charge", KEY_K)
 	_add_key_action("oxygen_skill", KEY_U)
-	_add_key_action("oxygen_ultimate", KEY_I)
+	_add_key_action("oxygen_skill2", KEY_I)
+	_add_key_action("oxygen_ultimate", KEY_O)
+	_add_key_action("dash", KEY_L)
 
 func _add_key_action(action: StringName, keycode: int) -> void:
 	if not InputMap.has_action(action):
@@ -339,7 +338,7 @@ func _build_ui() -> void:
 
 	var charge_text := Label.new()
 	charge_text.position = Vector2(310, 114)
-	charge_text.text = "K 蓄力"
+	charge_text.text = "I 蓄力"
 	charge_text.add_theme_font_size_override("font_size", 13)
 	charge_text.add_theme_color_override("font_color", Color("#ffd76e"))
 	layer.add_child(charge_text)
@@ -353,7 +352,7 @@ func _build_ui() -> void:
 
 	var controls := Label.new()
 	controls.position = Vector2(24, 610)
-	controls.text = "A/D 移动  Space 跳跃  J 普攻  K 蓄力重击  U 技能  I 大招  Q 盐酸  R 重置"
+	controls.text = "A/D 移动  K 跳跃  L 冲刺  J 攻击  U 技能1  I 技能2  O 大招  Q 盐酸  R 重置"
 	controls.add_theme_font_size_override("font_size", 15)
 	controls.add_theme_color_override("font_color", Color("#b9c9e7"))
 	layer.add_child(controls)
@@ -367,7 +366,7 @@ func _build_ui() -> void:
 
 	attack_label = Label.new()
 	attack_label.position = Vector2(24, 207)
-	attack_label.text = "氧元素攻击：J 普攻 · K 蓄力 · U 技能 · I 大招"
+	attack_label.text = "氧元素：J 攻击 · U 技能1 · I 技能2 · O 大招"
 	attack_label.add_theme_font_size_override("font_size", 15)
 	attack_label.add_theme_color_override("font_color", Color("#a4f4ff"))
 	layer.add_child(attack_label)

@@ -17,6 +17,9 @@ const MAX_OXYGEN := 100.0
 const SKILL_COST := 25.0
 const SKILL_COOLDOWN := 4.0
 const MAX_CHARGE_TIME := 1.4
+const DASH_SPEED := 900.0
+const DASH_DURATION := 0.18
+const DASH_COOLDOWN := 0.8
 
 var stability := MAX_STABILITY
 var spawn_position := Vector2.ZERO
@@ -26,6 +29,8 @@ var oxygen_energy := MAX_OXYGEN
 var charge_time := 0.0
 var charging := false
 var skill_cooldown := 0.0
+var dash_timer := 0.0
+var dash_cooldown := 0.0
 
 func _ready() -> void:
 	add_to_group("player")
@@ -35,6 +40,20 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("reset_demo"):
 		reset_to_spawn()
+
+	dash_cooldown = maxf(0.0, dash_cooldown - delta)
+	if Input.is_action_just_pressed("dash") and dash_cooldown <= 0.0:
+		dash_timer = DASH_DURATION
+		dash_cooldown = DASH_COOLDOWN
+		velocity = Vector2(facing * DASH_SPEED, 0.0)
+		attack_state_changed.emit("L 冲刺")
+
+	if dash_timer > 0.0:
+		dash_timer -= delta
+		velocity = Vector2(facing * DASH_SPEED, 0.0)
+		move_and_slide()
+		queue_redraw()
+		return
 
 	var axis := Input.get_axis("move_left", "move_right")
 	if abs(axis) > 0.01:
@@ -62,20 +81,20 @@ func _physics_process(delta: float) -> void:
 		oxygen_projectile_requested.emit(_attack_origin(), Vector2(facing, -0.04), 12.0, "normal")
 		attack_state_changed.emit("氧元素普攻：氧气弹")
 
-	if Input.is_action_just_pressed("oxygen_charge"):
+	if Input.is_action_just_pressed("oxygen_skill2"):
 		charging = true
 		charge_time = 0.0
-		attack_state_changed.emit("蓄力中：松开 K 释放重攻击")
+		attack_state_changed.emit("技能 2 蓄力中：松开 I 释放压缩氧核")
 
 	if charging:
 		charge_time = minf(MAX_CHARGE_TIME, charge_time + delta)
 		charge_changed.emit(charge_time, MAX_CHARGE_TIME)
-		if Input.is_action_just_released("oxygen_charge"):
+		if Input.is_action_just_released("oxygen_skill2"):
 			var ratio := clampf(charge_time / MAX_CHARGE_TIME, 0.2, 1.0)
 			var charge_damage := lerpf(22.0, 70.0, ratio)
 			oxygen_projectile_requested.emit(_attack_origin(), Vector2(facing, -0.04), charge_damage, "charged")
 			gain_oxygen(12.0 + 18.0 * ratio)
-			attack_state_changed.emit("氧元素重攻击：压缩氧核 %.0f%%" % (ratio * 100.0))
+			attack_state_changed.emit("技能 2：压缩氧核 %.0f%%" % (ratio * 100.0))
 			charging = false
 			charge_time = 0.0
 			charge_changed.emit(0.0, MAX_CHARGE_TIME)
@@ -131,6 +150,8 @@ func reset_to_spawn() -> void:
 	charging = false
 	charge_time = 0.0
 	skill_cooldown = 0.0
+	dash_timer = 0.0
+	dash_cooldown = 0.0
 	stability_changed.emit(stability, MAX_STABILITY)
 	oxygen_energy_changed.emit(oxygen_energy, MAX_OXYGEN)
 	charge_changed.emit(0.0, MAX_CHARGE_TIME)
