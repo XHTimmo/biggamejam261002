@@ -11,7 +11,9 @@ $demoCases = @(
     @{ Name = 'interactions'; Script = 'test_interactions.gd'; Extra = @() },
     @{ Name = 'progression'; Script = 'test_level_flow.gd'; Extra = @() },
     @{ Name = 'chemical-walkthrough'; Script = 'test_walkthrough.gd'; Extra = @() },
-    @{ Name = 'physical-walkthrough'; Script = 'test_walkthrough.gd'; Extra = @('--physical-route') }
+    @{ Name = 'physical-walkthrough'; Script = 'test_walkthrough.gd'; Extra = @('--physical-route') },
+    @{ Name = 'combat'; Script = 'test_combat.gd'; Extra = @() },
+    @{ Name = 'pixel-workbench'; Script = 'test_pixel_workbench.gd'; Extra = @() }
 )
 foreach ($demoCase in $demoCases) {
     $demoLogPath = Join-Path $demoLogDir ($demoCase.Name + '.log')
@@ -34,4 +36,4 @@ foreach ($demoCase in $demoCases) {
     }
     Write-Output ($demoOutput -split '\r?\n' | Where-Object { $_ -match '^PASS:' })
 }
-Write-Output 'PASS: all 5 demo verification scenarios'
+Write-Output 'PASS: all 7 demo verification scenarios'

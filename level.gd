@@ -15,6 +15,9 @@ const PROJECTILE_SCRIPT = preload("res://reaction_projectile.gd")
 const MAGNET_SCRIPT = preload("res://magnet_receiver.gd")
 const GEOMETRY_SCRIPT = preload("res://level_geometry.gd")
 const AUDIO_SCRIPT = preload("res://lab_audio.gd")
+const OXYGEN_PROJECTILE_SCRIPT = preload("res://oxygen_projectile.gd")
+const OXYGEN_PULSE_SCRIPT = preload("res://oxygen_pulse.gd")
+const TARGET_SCRIPT = preload("res://target_dummy.gd")
 
 const ZONE_WIDTH := 2048
 const LEVEL_WIDTH := ZONE_WIDTH * 3
@@ -40,6 +43,9 @@ var deaths := 0
 var resets := 0
 var item_uses := {"acid": 0, "ice": 0, "iron": 0}
 var stability_bar: ProgressBar
+var oxygen_bar: ProgressBar
+var charge_bar: ProgressBar
+var combat_label: Label
 var status_label: Label
 var objective_label: Label
 var stage_label: Label
@@ -76,7 +82,9 @@ func _ensure_input_actions() -> void:
 	var keys := {
 		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
 		"move_up": [KEY_W, KEY_UP], "move_down": [KEY_S, KEY_DOWN],
-		"jump": [KEY_SPACE], "use_acid": [KEY_Q], "reset_demo": [KEY_R],
+		"jump": [KEY_K], "use_acid": [KEY_Q], "reset_demo": [KEY_R],
+		"dash": [KEY_L], "oxygen_normal": [KEY_J], "oxygen_skill": [KEY_U],
+		"oxygen_skill2": [KEY_I], "oxygen_ultimate": [KEY_O],
 		"slot_1": [KEY_1], "slot_2": [KEY_2], "slot_3": [KEY_3],
 		"pause_demo": [KEY_ESCAPE], "skills": [KEY_TAB], "gravity_skill": [KEY_E]
 	}
@@ -117,6 +125,11 @@ func _create_player() -> void:
 	player.player_reset.connect(_on_player_reset)
 	player.jumped.connect(func(): audio.play_cue("jump"))
 	player.selection_changed.connect(func(): audio.play_cue("pickup"))
+	player.oxygen_projectile_requested.connect(_spawn_oxygen_projectile)
+	player.oxygen_pulse_requested.connect(_spawn_oxygen_pulse)
+	player.oxygen_energy_changed.connect(_on_oxygen_energy_changed)
+	player.charge_changed.connect(_on_charge_changed)
+	player.attack_state_changed.connect(_message)
 	camera = Camera2D.new()
 	camera.position = Vector2(100, -120)
 	camera.position_smoothing_enabled = true
@@ -187,6 +200,10 @@ func _build_reactions() -> void:
 	_hazard("CorrosionHazard", Vector2(1540, 604), Vector2(240, 28))
 	_platform(Rect2(1436, 466, 160, 24))
 	_platform(Rect2(1664, 420, 128, 24))
+	# Optional training balcony; targets never block the main puzzle route.
+	_platform(Rect2(592, 470, 292, 20))
+	_oxygen_target("OxygenTarget0", Vector2(760, 436))
+	_oxygen_target("OxygenTarget1", Vector2(840, 436))
 	_ladder("ReactionLadder", Vector2(1812, 515), 190)
 	_sample("c1", Vector2(668, 568))
 	_sample("c2", Vector2(1150, 480))
@@ -395,6 +412,72 @@ func _choose_route(route: String) -> void:
 func _spawn_acid(origin: Vector2, direction: Vector2) -> void:
 	_spawn_reagent(origin, direction, "acid")
 
+func _oxygen_target(node_name: String, pos: Vector2) -> void:
+	var target := StaticBody2D.new()
+	target.name = node_name
+	target.set_script(TARGET_SCRIPT)
+	target.position = pos
+	target.collision_layer = 2
+	target.collision_mask = 0
+	_shape(target, Vector2(50, 72))
+	build_parent.add_child(target)
+	target.damage_dealt.connect(_on_target_damage)
+
+func _on_target_damage(amount: float, _kind: String) -> void:
+	player.gain_oxygen(minf(18, amount * 0.35))
+	audio.play_cue("reaction")
+
+func _spawn_oxygen_projectile(origin: Vector2, direction: Vector2, damage: float, kind: String) -> void:
+	if demo_complete or player.resetting or get_tree().paused:
+		return
+	var projectile := Area2D.new()
+	projectile.set_script(OXYGEN_PROJECTILE_SCRIPT)
+	projectile.position = origin
+	projectile.direction = direction
+	projectile.damage = damage
+	projectile.attack_kind = kind
+	projectile.collision_layer = 0
+	projectile.collision_mask = 3
+	var shape := CircleShape2D.new()
+	shape.radius = 22 if kind == "charged" else 11
+	var collider := CollisionShape2D.new()
+	collider.shape = shape
+	projectile.add_child(collider)
+	projectile.process_mode = Node.PROCESS_MODE_PAUSABLE
+	add_child(projectile)
+	projectile.add_to_group("projectiles")
+	audio.play_cue("throw")
+
+func _spawn_oxygen_pulse(origin: Vector2, radius: float, damage: float, kind: String) -> void:
+	if demo_complete or player.resetting or get_tree().paused:
+		return
+	var pulse := Area2D.new()
+	pulse.set_script(OXYGEN_PULSE_SCRIPT)
+	pulse.position = origin
+	pulse.radius = radius
+	pulse.damage = damage
+	pulse.attack_kind = kind
+	pulse.collision_layer = 0
+	pulse.collision_mask = 2
+	var shape := CircleShape2D.new()
+	shape.radius = radius
+	var collider := CollisionShape2D.new()
+	collider.shape = shape
+	pulse.add_child(collider)
+	pulse.process_mode = Node.PROCESS_MODE_PAUSABLE
+	add_child(pulse)
+	pulse.add_to_group("projectiles")
+	audio.play_cue("spring")
+
+func _on_oxygen_energy_changed(value: float, _maximum: float) -> void:
+	if oxygen_bar:
+		oxygen_bar.value = value
+
+func _on_charge_changed(value: float, maximum: float) -> void:
+	if charge_bar:
+		charge_bar.max_value = maximum
+		charge_bar.value = value
+
 func _spawn_reagent(origin: Vector2, direction: Vector2, reagent: String) -> void:
 	if demo_complete or player.resetting:
 		return
@@ -493,6 +576,7 @@ func _process(delta: float) -> void:
 		sample_label.text = "◇  %d / %d" % [samples.size(), SAMPLE_COUNT]
 		objective_label.text = OBJECTIVES[active_checkpoint]
 		cooldown_label.text = "重力  %.1fs" % player.gravity_cooldown if player.gravity_cooldown > 0 else "重力  READY" if player.available_reagents >= 2 else "重力  LOCKED"
+		combat_label.text = "U %.1fs" % player.skill_cooldown if player.skill_cooldown > 0 else "U / O %d" % player.oxygen_energy
 		for index in range(3):
 			slots[index].modulate = Color.WHITE if index < player.available_reagents else Color(0.4, 0.5, 0.55)
 			slots[index].self_modulate = Color("#adffe8") if index == player.selected_reagent else Color.WHITE
@@ -541,6 +625,21 @@ func _button(text: String, pos: Vector2, callback: Callable) -> Button:
 	modal.add_child(button)
 	return button
 
+func _style_meter(bar: ProgressBar, tint: Color, meter_size: Vector2) -> void:
+	# The default theme has a minimum height that exceeds our compact HUD.
+	bar.add_theme_font_size_override("font_size", 1)
+	var background := StyleBoxFlat.new()
+	background.bg_color = Color("#152a32")
+	background.set_content_margin_all(0)
+	bar.add_theme_stylebox_override("background", background)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = tint
+	fill.set_content_margin_all(0)
+	bar.add_theme_stylebox_override("fill", fill)
+	bar.size = meter_size
+	# Joining the CanvasLayer refreshes the inherited theme asynchronously.
+	bar.set_deferred("size", meter_size)
+
 func _build_ui() -> void:
 	ui_layer = CanvasLayer.new()
 	add_child(ui_layer)
@@ -549,14 +648,27 @@ func _build_ui() -> void:
 	_label("STABILITY", Vector2(42, 70), 12, Color("#7ea69e"), ui_layer)
 	stability_bar = ProgressBar.new()
 	stability_bar.position = Vector2(140, 73)
-	stability_bar.size = Vector2(218, 12)
 	stability_bar.max_value = 100
 	stability_bar.value = 100
 	stability_bar.show_percentage = false
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = Color("#83d5ac")
-	stability_bar.add_theme_stylebox_override("fill", fill)
+	_style_meter(stability_bar, Color("#83d5ac"), Vector2(218, 12))
 	ui_layer.add_child(stability_bar)
+	_label("OXYGEN", Vector2(42, 88), 11, Color("#8aceda"), ui_layer)
+	oxygen_bar = ProgressBar.new()
+	oxygen_bar.position = Vector2(140, 91)
+	oxygen_bar.max_value = player.MAX_OXYGEN
+	oxygen_bar.value = player.oxygen_energy
+	oxygen_bar.show_percentage = false
+	_style_meter(oxygen_bar, Color("#8aceda"), Vector2(218, 8))
+	ui_layer.add_child(oxygen_bar)
+	_label("I 蓄力", Vector2(366, 52), 12, Color("#dfbd7d"), ui_layer)
+	charge_bar = ProgressBar.new()
+	charge_bar.position = Vector2(365, 73)
+	charge_bar.max_value = player.MAX_CHARGE_TIME
+	charge_bar.show_percentage = false
+	_style_meter(charge_bar, Color("#dfbd7d"), Vector2(68, 12))
+	ui_layer.add_child(charge_bar)
+	combat_label = _label("", Vector2(365, 89), 11, Color("#8aceda"), ui_layer)
 	var names := ["1  稀盐酸", "2  冷却胶囊", "3  轻薄铁片"]
 	for index in range(3):
 		var slot := _panel(Rect2(452 + index * 130, 32, 120, 55), ui_layer)
@@ -570,11 +682,11 @@ func _build_ui() -> void:
 	objective_label = _label("", Vector2(40, 114), 16, Color("#d3bc8a"), ui_layer)
 	status_label = _label("", Vector2(40, 139), 15, Color("#9cddc2"), ui_layer)
 	_panel(Rect2(20, 621, 1112, 26), ui_layer)
-	_label("A/D 移动  W/S 梯子  S 蹲伏  Space 二段跳  1–3 道具  Q/左键 投掷  E/右键 重力  R 检查点  Tab 技能  Esc 暂停", Vector2(32, 624), 13, Color("#9db9b8"), ui_layer)
+	_label("A/D 移动  W/S 梯子  S 蹲伏  K 二段跳  L 冲刺  J/U/I/O 氧攻击  1–3 道具  Q/左键 投掷  E/右键 重力  R 恢复  Tab 技能  Esc 暂停", Vector2(32, 624), 12, Color("#9db9b8"), ui_layer)
 	modal = _panel(Rect2(186, 165, 780, 418), ui_layer)
 	modal.mouse_filter = Control.MOUSE_FILTER_STOP
 	modal_title = _label("", Vector2(32, 24), 28, Color("#e6eddd"), modal)
-	modal_body = _label("", Vector2(32, 78), 18, Color("#acd0c9"), modal)
+	modal_body = _label("", Vector2(32, 78), 16, Color("#acd0c9"), modal)
 	modal_body.size = Vector2(716, 250)
 	modal_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	modal_primary = _button("继续实验", Vector2(32, 352), _close_modal)
@@ -591,7 +703,7 @@ func _show_modal(mode: String) -> void:
 		modal_primary.text = "再试另一条路线"
 	else:
 		modal_title.text = "基础能力" if mode == "skills" else "实验暂停"
-		modal_body.text = "化学 · 试剂投放\n1 稀盐酸 / 2 冷却胶囊 / 3 轻薄铁片；Q 朝前，左键瞄准。\n试剂随检查点逐段解锁，实验补给不限次数。\n\n物理 · 局部重力扰动\n靠近青色吊台，E 或右键释放；持续 4 秒，冷却 4 秒。\n\nR 恢复当前舱段；样本与已解锁能力保留。\n两条出口路线均可通关，样本收集不影响主线。"
+		modal_body.text = "移动 · K 跳跃 / 二段跳，L 冲刺；W/S 梯子，S 蹲伏。\n氧元素 · J 普攻；U 冲击消耗 25 氧能量，冷却 4 秒。\n按住 I、松开释放蓄力；O 大招需要 100 氧能量。\n反应舱上层训练靶可练习攻击，命中补充氧能量。\n\n试剂 · 1 盐酸 / 2 冷却胶囊 / 3 铁片；Q 朝前，左键瞄准。\n试剂随检查点解锁，补给不限次数。\n重力 · 靠近青色吊台，E / 右键；持续及冷却均为 4 秒。\n\nR 恢复当前舱段和战斗状态，保留样本与解锁能力。"
 		modal_primary.text = "继续实验"
 
 func _close_modal() -> void:
@@ -634,6 +746,10 @@ func _restart_demo() -> void:
 	player.coyote_remaining = 0
 	player.resetting = false
 	player.gravity_cooldown = 0
+	player.acid_cooldown = 0
+	player.reset_combat()
+	player._update_crouch(false)
+	player._update_visuals()
 	player.restore_stability(100)
 	camera.reset_smoothing()
 	_message("新实验开始 · 试试另一种解除出口锁的方法。")

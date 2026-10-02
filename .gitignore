@@ -1,6 +1,10 @@
 # Local engine binaries
 engine/
 
+# External asset staging area (keep original user assets locally)
+image/
+image.rar
+
 # Godot-generated project data
 .godot/
 *.import
@@ -9,4 +13,3 @@ engine/
 .DS_Store
 Thumbs.db
 artifacts/
-

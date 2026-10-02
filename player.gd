@@ -1,5 +1,7 @@
 extends CharacterBody2D
 
+const HERO_IDLE_TEXTURE = preload("res://assets/character/hero_idle_01.png")
+
 signal stability_changed(value: float, maximum: float)
 signal acid_requested(origin: Vector2, direction: Vector2)
 signal reagent_requested(origin: Vector2, direction: Vector2, reagent: String)
@@ -7,6 +9,11 @@ signal gravity_requested(target: Vector2)
 signal player_reset
 signal jumped
 signal selection_changed
+signal oxygen_projectile_requested(origin: Vector2, direction: Vector2, damage: float, attack_kind: String)
+signal oxygen_pulse_requested(origin: Vector2, radius: float, damage: float, attack_kind: String)
+signal oxygen_energy_changed(value: float, maximum: float)
+signal charge_changed(value: float, maximum: float)
+signal attack_state_changed(message: String)
 
 const SPEED := 300.0
 const JUMP_VELOCITY := -620.0
@@ -14,6 +21,13 @@ const MAX_STABILITY := 100.0
 const GRAVITY := 1500.0
 const CLIMB_SPEED := 210.0
 const REAGENTS := ["acid", "ice", "iron"]
+const MAX_OXYGEN := 100.0
+const SKILL_COST := 25.0
+const SKILL_COOLDOWN := 4.0
+const MAX_CHARGE_TIME := 1.4
+const DASH_SPEED := 900.0
+const DASH_DURATION := 0.18
+const DASH_COOLDOWN := 0.8
 
 var stability := MAX_STABILITY
 var spawn_position := Vector2.ZERO
@@ -35,6 +49,14 @@ var reset_reason := "manual"
 var crouching := false
 var damage_flash := 0.0
 var motion_clock := 0.0
+var oxygen_energy := MAX_OXYGEN
+var charge_time := 0.0
+var charging := false
+var skill_cooldown := 0.0
+var dash_timer := 0.0
+var dash_cooldown := 0.0
+var dash_direction := 1.0
+var hero_sprite: Sprite2D
 
 func _ready() -> void:
 	add_to_group("player")
@@ -42,6 +64,11 @@ func _ready() -> void:
 	push_shape.size = Vector2(20, 36)
 	floor_snap_length = 6
 	process_mode = Node.PROCESS_MODE_PAUSABLE
+	hero_sprite = Sprite2D.new()
+	hero_sprite.texture = HERO_IDLE_TEXTURE
+	hero_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	add_child(hero_sprite)
+	_update_visuals()
 
 func _physics_process(delta: float) -> void:
 	if resetting:
@@ -51,6 +78,9 @@ func _physics_process(delta: float) -> void:
 	ladder_detach = maxf(0, ladder_detach - delta)
 	acid_cooldown = maxf(0, acid_cooldown - delta)
 	gravity_cooldown = maxf(0, gravity_cooldown - delta)
+	skill_cooldown = maxf(0, skill_cooldown - delta)
+	dash_cooldown = maxf(0, dash_cooldown - delta)
+	dash_timer = maxf(0, dash_timer - delta)
 	if active_ladder and (not is_instance_valid(active_ladder) or not active_ladder.overlaps_body(self)):
 		active_ladder = null
 		is_climbing = false
@@ -126,11 +156,87 @@ func _physics_process(delta: float) -> void:
 		gravity_cooldown = 4
 		var offset := get_global_mouse_position() - global_position
 		gravity_requested.emit(global_position + offset.limit_length(220) if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) else global_position)
+	_process_oxygen_attacks(delta)
+	if Input.is_action_just_pressed("dash") and dash_cooldown <= 0 and active_ladder == null and not crouching and not launched:
+		dash_direction = facing
+		dash_timer = DASH_DURATION
+		dash_cooldown = DASH_COOLDOWN
+		attack_state_changed.emit("L 冲刺")
+	if dash_timer > 0:
+		velocity = Vector2(dash_direction * DASH_SPEED, 0)
 	move_and_slide()
+	if dash_timer > 0 and is_on_wall():
+		dash_timer = 0
 	_push_weights(axis)
 	if global_position.y > 900:
 		reset_to_spawn("fall")
+	_update_visuals()
 	queue_redraw()
+
+func _process_oxygen_attacks(delta: float) -> void:
+	if Input.is_action_just_pressed("oxygen_normal"):
+		oxygen_projectile_requested.emit(_attack_origin(), Vector2(facing, -0.04), 12.0, "normal")
+		attack_state_changed.emit("氧元素普攻：氧气弹")
+	if Input.is_action_just_pressed("oxygen_skill2"):
+		charging = true
+		charge_time = 0
+		attack_state_changed.emit("技能 2 蓄力中：松开 I 释放压缩氧核")
+	if charging:
+		charge_time = minf(MAX_CHARGE_TIME, charge_time + delta)
+		charge_changed.emit(charge_time, MAX_CHARGE_TIME)
+		# Releasing I while paused must also finish the charge after resuming.
+		if not Input.is_action_pressed("oxygen_skill2"):
+			var ratio := clampf(charge_time / MAX_CHARGE_TIME, 0.2, 1.0)
+			oxygen_projectile_requested.emit(_attack_origin(), Vector2(facing, -0.04), lerpf(22.0, 70.0, ratio), "charged")
+			gain_oxygen(12.0 + 18.0 * ratio)
+			attack_state_changed.emit("技能 2：压缩氧核 %.0f%%" % (ratio * 100))
+			charging = false
+			charge_time = 0
+			charge_changed.emit(0, MAX_CHARGE_TIME)
+	if Input.is_action_just_pressed("oxygen_skill"):
+		if skill_cooldown <= 0 and oxygen_energy >= SKILL_COST:
+			consume_oxygen(SKILL_COST)
+			skill_cooldown = SKILL_COOLDOWN
+			oxygen_pulse_requested.emit(global_position + Vector2(118 * facing, -8), 165.0, 34.0, "skill")
+			attack_state_changed.emit("技能 1：氧化冲击")
+		else:
+			attack_state_changed.emit("技能未就绪：需要 25 氧能量并等待冷却")
+	if Input.is_action_just_pressed("oxygen_ultimate"):
+		if oxygen_energy >= MAX_OXYGEN:
+			consume_oxygen(MAX_OXYGEN)
+			oxygen_pulse_requested.emit(global_position + Vector2(170 * facing, -12), 330.0, 120.0, "ultimate")
+			attack_state_changed.emit("大招：纯氧领域")
+		else:
+			attack_state_changed.emit("大招未就绪：氧能量需要充满")
+
+func _attack_origin() -> Vector2:
+	return global_position + Vector2(30 * facing, -10)
+
+func gain_oxygen(amount: float) -> void:
+	oxygen_energy = clampf(oxygen_energy + amount, 0, MAX_OXYGEN)
+	oxygen_energy_changed.emit(oxygen_energy, MAX_OXYGEN)
+
+func consume_oxygen(amount: float) -> void:
+	oxygen_energy = clampf(oxygen_energy - amount, 0, MAX_OXYGEN)
+	oxygen_energy_changed.emit(oxygen_energy, MAX_OXYGEN)
+
+func reset_combat() -> void:
+	oxygen_energy = MAX_OXYGEN
+	charging = false
+	charge_time = 0
+	skill_cooldown = 0
+	dash_timer = 0
+	dash_cooldown = 0
+	oxygen_energy_changed.emit(oxygen_energy, MAX_OXYGEN)
+	charge_changed.emit(0, MAX_CHARGE_TIME)
+
+func _update_visuals() -> void:
+	if not hero_sprite:
+		return
+	hero_sprite.flip_h = facing < 0
+	hero_sprite.scale = Vector2(1, 0.6 if crouching else 1.0)
+	hero_sprite.position = Vector2(0, 26 - 24 * hero_sprite.scale.y)
+	hero_sprite.modulate = Color(1.8, 1.8, 1.8) if damage_flash > 0 else Color.WHITE
 
 func _throw(aim_at_mouse: bool) -> void:
 	acid_cooldown = 0.35
@@ -146,12 +252,13 @@ func _throw(aim_at_mouse: bool) -> void:
 func _update_crouch(wants_crouch: bool) -> void:
 	var collider := get_node("CollisionShape2D") as CollisionShape2D
 	if not wants_crouch and crouching:
-		var test_shape := CapsuleShape2D.new()
-		test_shape.radius = 16
-		test_shape.height = 52
+		# Query only the extra headroom, so the supporting floor is not
+		# mistaken for an overhead obstacle when the capsule touches it.
+		var test_shape := RectangleShape2D.new()
+		test_shape.size = Vector2(32, 20)
 		var query := PhysicsShapeQueryParameters2D.new()
 		query.shape = test_shape
-		query.transform = global_transform
+		query.transform = global_transform.translated_local(Vector2(0, -16))
 		query.collision_mask = collision_mask
 		query.exclude = [get_rid()]
 		if not get_world_2d().direct_space_state.intersect_shape(query, 1).is_empty():
@@ -218,24 +325,17 @@ func reset_to_spawn(reason := "manual") -> void:
 	gravity_cooldown = 0
 	acid_cooldown = 0
 	stability = MAX_STABILITY
+	reset_combat()
+	_update_crouch(false)
+	_update_visuals()
 	stability_changed.emit(stability, MAX_STABILITY)
 	player_reset.emit()
 
 func _draw() -> void:
-	var offset := 14.0 if crouching else 0.0
-	draw_set_transform(Vector2(0, offset), 0, Vector2.ONE)
-	var tint := Color("#ffffff") if damage_flash > 0 else Color("#edc591")
-	draw_rect(Rect2(-16, -26, 32, 40 - offset), tint)
-	draw_rect(Rect2(-18, -31, 36, 12), Color("#e8efe3"))
-	draw_rect(Rect2(-11, -27, 22, 7), Color("#344e5c"))
-	draw_rect(Rect2(-11, -24, 7, 2), Color("#83c6d0"))
-	var stride := sin(motion_clock * 16) * 3 if is_on_floor() and absf(velocity.x) > 10 else 0.0
-	draw_rect(Rect2(-14, 14 - offset + stride, 11, 12), Color("#56729d"))
-	draw_rect(Rect2(3, 14 - offset - stride, 11, 12), Color("#56729d"))
-	draw_rect(Rect2(-18, -12, 6, 24 - offset), Color("#647778"))
 	var reagent_tint := [Color("#8ce3b5"), Color("#a2e0fa"), Color("#dfbd7d")]
-	draw_circle(Vector2(13 * facing, -7), 4, reagent_tint[selected_reagent])
+	draw_circle(Vector2(19 * facing, 5 if crouching else -7), 3, reagent_tint[selected_reagent])
 	if is_climbing:
-		draw_line(Vector2(-14, -2), Vector2(-22, -13), tint, 5)
-		draw_line(Vector2(14, -2), Vector2(22, -13), tint, 5)
-	draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
+		draw_line(Vector2(-20, 6), Vector2(-20, -12), Color("#83d5ac"), 2)
+	if charging:
+		var ratio := clampf(charge_time / MAX_CHARGE_TIME, 0, 1)
+		draw_arc(Vector2.ZERO, 32 + ratio * 12, -PI * 0.8, PI * 0.8, 24, Color("#ffd76e"), 3)

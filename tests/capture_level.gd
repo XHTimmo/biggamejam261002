@@ -24,9 +24,26 @@ func _capture() -> void:
 	await _save_frame(world, "03-physical-route", Vector2(4810, 334))
 	world.zones[2].get_node("FinalWater").freeze_hit()
 	await _save_frame(world, "04-chemical-route", Vector2(4910, 684))
+	world.active_checkpoint = 1
+	player.available_reagents = 2
+	await _save_frame(world, "05-oxygen-training", Vector2(2678, 444))
+	world.active_checkpoint = 0
+	player._update_crouch(true)
+	player._update_visuals()
+	player.queue_redraw()
+	await _save_frame(world, "06-crouching", Vector2(190, 584))
+	player._update_crouch(false)
+	player.is_climbing = true
+	player._update_visuals()
+	player.queue_redraw()
+	await _save_frame(world, "07-ladder", Vector2(713, 500))
+	player.is_climbing = false
+	world._show_modal("skills")
+	await _save_frame(world, "08-skills", Vector2(713, 500))
+	world._close_modal()
 	world.free()
 	await process_frame
-	print("PASS: saved four rendered level previews")
+	print("PASS: saved eight rendered level previews")
 	quit(0)
 
 func _save_frame(world: Node2D, file_name: String, pos: Vector2) -> void:
