@@ -34,4 +34,3 @@ func _draw() -> void:
 	draw_rect(Rect2(-hazard_size * 0.5, hazard_size), tint.darkened(0.5))
 	for x in range(int(-hazard_size.x / 2) + 14, int(hazard_size.x / 2), 28):
 		draw_circle(Vector2(x, -hazard_size.y / 2), 5, tint)
-

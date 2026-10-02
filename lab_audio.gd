@@ -1,10 +1,22 @@
 extends Node
 
+const BACKGROUND_MUSIC = preload("res://music/旧舱新发现.mp3")
+
+var music_player: AudioStreamPlayer
 var voices: Array[AudioStreamPlayer] = []
 var bank := {}
 var voice_index := 0
 
 func _ready() -> void:
+	music_player = AudioStreamPlayer.new()
+	music_player.name = "BackgroundMusic"
+	music_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	music_player.volume_db = -12.0
+	var music := BACKGROUND_MUSIC.duplicate() as AudioStreamMP3
+	music.loop = true
+	music_player.stream = music
+	add_child(music_player)
+	music_player.play()
 	for index in range(4):
 		var voice := AudioStreamPlayer.new()
 		voice.volume_db = -21
@@ -24,6 +36,9 @@ func play_cue(key: String) -> void:
 	voice.play()
 
 func _exit_tree() -> void:
+	if music_player:
+		music_player.stop()
+		music_player.stream = null
 	for voice in voices:
 		voice.stop()
 		voice.stream = null

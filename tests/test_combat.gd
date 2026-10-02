@@ -13,7 +13,7 @@ func _run() -> void:
 	world = MAIN.instantiate()
 	root.add_child(world)
 	player = world.player
-	player.oxygen_projectile_requested.connect(func(_o, _d, _damage, kind): attacks[kind] += 1)
+	player.element_projectile_requested.connect(func(_o, _d, _damage, kind, _element): attacks[kind] += 1)
 	player.oxygen_pulse_requested.connect(func(_o, _r, _damage, kind): attacks[kind] += 1)
 	await _frames(40)
 	await _keys_and_visuals()
@@ -46,7 +46,7 @@ func _keys_and_visuals() -> void:
 	_expect(player.hero_sprite.texture.get_width() / player.hero_sprite.hframes == 32 and player.hero_sprite.texture.get_height() == 48, "Hero animation frame was not loaded")
 	_expect(player.hero_sprite.scale == Vector2(2, 2), "Standing sprite did not use the scene display scale")
 	_expect(is_equal_approx(player.hero_sprite.position.y + 48, 26), "Sprite feet do not align with collider")
-	# A real low ceiling keeps the crouched body short until it clears the roof.
+	# A real low ceiling keeps the prone crawl body short until it clears the roof.
 	var roof := StaticBody2D.new()
 	var shape := RectangleShape2D.new()
 	shape.size = Vector2(100, 20)
@@ -60,7 +60,7 @@ func _keys_and_visuals() -> void:
 	await _frames(3)
 	Input.action_release("move_down")
 	await _frames(3)
-	_expect(player.crouching and player.hero_sprite.scale.y < 2, "Low ceiling allowed standing or sprite did not crouch")
+	_expect(player.crouching and player.hero_sprite.scale.y < 2, "Low ceiling allowed standing or sprite did not enter prone crawl")
 	roof.free()
 	await _frames(3)
 	_expect(not player.crouching, "Player could not stand after removing the ceiling")
@@ -116,7 +116,7 @@ func _attacks() -> void:
 	await _frames(130)
 	_expect(not target.defeated and target.health == 100, "Training target did not respawn")
 	var rock: StaticBody2D = world.zones[1].get_node("CarbonateRock")
-	world._spawn_oxygen_projectile(Vector2(2440, 540), Vector2.RIGHT, 70, "charged")
+	world._spawn_element_projectile(Vector2(2440, 540), Vector2.RIGHT, 70, "charged", "oxygen")
 	await _frames(15)
 	_expect(not rock.dissolving and not world.objectives[1], "Oxygen attack bypassed the carbonate puzzle")
 	_place(Vector2(2190, 584))
@@ -130,8 +130,6 @@ func _dash() -> void:
 	await _frames(4)
 	player.reset_combat()
 	player.skill_cooldown = 3
-	player.gravity_cooldown = 3
-	player.acid_cooldown = 0.5
 	_key(KEY_L, true)
 	await _frames(2)
 	_key(KEY_L, false)
@@ -139,7 +137,7 @@ func _dash() -> void:
 	Input.action_press("move_left")
 	await _frames(5)
 	_expect(player.position.x > start_x + 40 and player.velocity.x == 900, "Dash reversed when direction changed: x=%.2f start=%.2f vx=%.2f timer=%.3f" % [player.position.x, start_x, player.velocity.x, player.dash_timer])
-	_expect(player.skill_cooldown < 3 and player.gravity_cooldown < 3 and player.acid_cooldown < 0.5, "Dash froze other cooldowns")
+	_expect(player.skill_cooldown < 3, "Dash froze other cooldowns")
 	Input.action_release("move_left")
 	await _frames(8)
 	_expect(player.dash_timer == 0, "Dash did not end after its duration")

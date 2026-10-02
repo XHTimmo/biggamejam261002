@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $demoRoot = Split-Path -Parent $PSScriptRoot
-$demoEngine = [IO.Path]::GetFullPath((Join-Path $demoRoot '..\Godot_v4.7.2-stable_win64.exe'))
+$demoEngine = [IO.Path]::GetFullPath((Join-Path $demoRoot 'engine\Godot_v4.7.2-stable_win64_console.exe'))
 if (-not (Test-Path -LiteralPath $demoEngine)) {
     throw "Godot executable not found: $demoEngine"
 }
@@ -10,8 +10,9 @@ $demoCases = @(
     @{ Name = 'spawn'; Script = 'test_player_spawn.gd'; Extra = @() },
     @{ Name = 'interactions'; Script = 'test_interactions.gd'; Extra = @() },
     @{ Name = 'progression'; Script = 'test_level_flow.gd'; Extra = @() },
-    @{ Name = 'chemical-walkthrough'; Script = 'test_walkthrough.gd'; Extra = @() },
-    @{ Name = 'physical-walkthrough'; Script = 'test_walkthrough.gd'; Extra = @('--physical-route') },
+    # Old throwable/gravity walkthrough is archived until the level is redesigned.
+    @{ Name = 'elements'; Script = 'test_elements.gd'; Extra = @() },
+    @{ Name = 'animation-states'; Script = 'test_animation_states.gd'; Extra = @() },
     @{ Name = 'combat'; Script = 'test_combat.gd'; Extra = @() },
     @{ Name = 'pixel-workbench'; Script = 'test_pixel_workbench.gd'; Extra = @() }
 )

@@ -21,7 +21,7 @@ func _run() -> void:
 	await _test_ladder()
 	await _test_spring()
 	await _test_weight_switch_and_gate()
-	await _test_acid_and_rock()
+	await _test_rock_module()
 	await _test_corrosion_hazard()
 
 	if failures.is_empty():
@@ -97,11 +97,12 @@ func _test_weight_switch_and_gate() -> void:
 	_expect(not gate.is_open, "Gate stayed open after the counterweight left the switch")
 
 
-func _test_acid_and_rock() -> void:
+func _test_rock_module() -> void:
 	var rock := world.get_node("Zone1/CarbonateRock")
-	world._spawn_acid(Vector2(2410.0, 545.0), Vector2.RIGHT)
+	# Legacy environmental module remains unchanged; no player throwable exists.
+	rock.acid_hit()
 	await _wait_physics(16)
-	_expect(rock.dissolving, "Acid bottle did not trigger the carbonate rock")
+	_expect(rock.dissolving, "Rock module did not respond to its environmental fixture")
 
 
 func _test_corrosion_hazard() -> void:

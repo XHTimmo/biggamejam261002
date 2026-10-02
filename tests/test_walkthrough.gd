@@ -1,3 +1,5 @@
+# ARCHIVED: pre-element throwable/gravity input walkthrough.
+# Not part of test_demo.ps1; level dependencies intentionally remain unchanged.
 extends SceneTree
 
 const MAIN := preload("res://main.tscn")

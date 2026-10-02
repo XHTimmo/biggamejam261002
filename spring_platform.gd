@@ -40,4 +40,3 @@ func _draw() -> void:
 	draw_line(Vector2(10, -13), Vector2(22, 0), Color("#ffe59b"), 3.0)
 	draw_line(Vector2(22, 0), Vector2(34, -13), Color("#ffe59b"), 3.0)
 	draw_line(Vector2(34, -13), Vector2(46, 0), Color("#ffe59b"), 3.0)
-

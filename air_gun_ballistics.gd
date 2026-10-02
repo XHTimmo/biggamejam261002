@@ -13,6 +13,8 @@ const ENERGY_CUTOFF := 0.12
 const MAX_FLIGHT_SECONDS := 2.5
 const STEP_SECONDS := 1.0 / 120.0
 
+var molar_mass_ratio := OXYGEN_TO_AIR_MOLAR_MASS
+var mixing_per_second := MIXING_PER_SECOND
 var environment: Resource = ENVIRONMENT.new()
 var compression_strength := 1.0
 var position_m := Vector2.ZERO
@@ -29,7 +31,7 @@ func launch(shot_direction: Vector2, strength: float, air: Resource) -> void:
 	compression_strength = clampf(strength, 1.0, 4.0)
 	gas_temperature_k = environment.oxygen_temperature()
 	# Fixed intake volume and stored-energy scale: denser gas has more mass.
-	var relative_packet_density: float = environment.air_density() / ENVIRONMENT.REFERENCE_DENSITY * environment.temperature_k / gas_temperature_k
+	var relative_packet_density: float = environment.air_density() / ENVIRONMENT.REFERENCE_DENSITY * environment.temperature_k / gas_temperature_k * molar_mass_ratio / OXYGEN_TO_AIR_MOLAR_MASS
 	initial_speed_mps = BASE_SPEED_MPS * sqrt(compression_strength / maxf(0.05, relative_packet_density))
 	velocity_mps = shot_direction.normalized() * initial_speed_mps
 	position_m = Vector2.ZERO
@@ -39,7 +41,7 @@ func launch(shot_direction: Vector2, strength: float, air: Resource) -> void:
 	active = environment.air_density() >= ENVIRONMENT.REFERENCE_DENSITY * 0.05
 
 func density_ratio() -> float:
-	var pure_ratio: float = OXYGEN_TO_AIR_MOLAR_MASS * environment.temperature_k / gas_temperature_k
+	var pure_ratio: float = molar_mass_ratio * environment.temperature_k / gas_temperature_k
 	return 1.0 + coherence * (pure_ratio - 1.0)
 
 func buoyancy_acceleration() -> float:
@@ -64,7 +66,7 @@ func advance(delta: float) -> void:
 		var displacement := (before + velocity_mps) * (0.5 * step)
 		position_m += displacement
 		distance_m += displacement.length()
-		coherence *= exp(-MIXING_PER_SECOND / sqrt(compression_strength) * step)
+		coherence *= exp(-mixing_per_second / sqrt(compression_strength) * step)
 		age += step
 		remaining -= step
 		active = energy_fraction() > ENERGY_CUTOFF and coherence > 0.3 and age < MAX_FLIGHT_SECONDS

@@ -24,4 +24,3 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, 9.0, Color("#8ce3b5"))
 	draw_rect(Rect2(-4, -13, 8, 6), Color("#c9f7de"), true)
 	draw_line(Vector2(-5, 3), Vector2(4, -4), Color(1.0, 1.0, 1.0, 0.7), 2.0)
-

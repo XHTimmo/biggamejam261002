@@ -1,5 +1,7 @@
 extends AnimatableBody2D
 
+const PLATFORM_TILE_TEXTURE = preload("res://assets/environment/tech_floating_platform_tile.png")
+
 @export var platform_size := Vector2(144, 20)
 @export var end_offset := Vector2(0, -190)
 @export var travel_speed := 95.0
@@ -37,8 +39,6 @@ func _physics_process(delta: float) -> void:
 
 func _draw() -> void:
 	var rect := Rect2(-platform_size * 0.5, platform_size)
-	draw_rect(rect, Color("#24494c"))
-	draw_rect(rect.grow(-3), Color("#438c89"))
-	draw_line(rect.position, rect.position + Vector2(platform_size.x, 0), Color("#a9fff0"), 3)
-	for x in range(int(-platform_size.x / 2) + 8, int(platform_size.x / 2) - 4, 20):
-		draw_line(Vector2(x, 2), Vector2(x + 8, 7), Color("#e8b66d"), 3)
+	draw_texture_rect(PLATFORM_TILE_TEXTURE, rect, true)
+	var edge_color := Color("#D8FFFF") if activated or gravity_remaining > 0 else Color("#9AF5E5")
+	draw_line(rect.position, rect.position + Vector2(platform_size.x, 0), edge_color, 2)

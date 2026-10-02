@@ -24,4 +24,3 @@ func _draw() -> void:
 	for y in range(int(-half.y), int(half.y), 16):
 		draw_rect(Rect2(-half.x, y, gate_size.x, 12), Color("#728a9b"))
 		draw_line(Vector2(-half.x + 3, y + 2), Vector2(half.x - 3, y + 9), Color("#e5b467"), 3)
-

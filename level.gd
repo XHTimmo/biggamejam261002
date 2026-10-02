@@ -11,15 +11,16 @@ const LADDER_SCRIPT = preload("res://ladder.gd")
 const PLATFORM_SCRIPT = preload("res://moving_platform.gd")
 const MARKER_SCRIPT = preload("res://level_marker.gd")
 const WATER_SCRIPT = preload("res://water_trough.gd")
-const PROJECTILE_SCRIPT = preload("res://reaction_projectile.gd")
+const ELEMENTS = preload("res://element_catalog.gd")
 const MAGNET_SCRIPT = preload("res://magnet_receiver.gd")
 const GEOMETRY_SCRIPT = preload("res://level_geometry.gd")
 const AUDIO_SCRIPT = preload("res://lab_audio.gd")
-const OXYGEN_PROJECTILE_SCRIPT = preload("res://oxygen_projectile.gd")
+const ELEMENT_PROJECTILE_SCRIPT = preload("res://element_projectile.gd")
 const OXYGEN_PULSE_SCRIPT = preload("res://oxygen_pulse.gd")
 const TARGET_SCRIPT = preload("res://target_dummy.gd")
 const AIR_ENVIRONMENT = preload("res://air_gun_environment.gd")
 const AIR_BALLISTICS = preload("res://air_gun_ballistics.gd")
+const BACKGROUND_TEXTURE = preload("res://assets/environment/tech_background.png")
 
 const ZONE_WIDTH := 2048
 const LEVEL_WIDTH := ZONE_WIDTH * 3
@@ -43,7 +44,7 @@ var samples: Dictionary = {}
 var elapsed := 0.0
 var deaths := 0
 var resets := 0
-var item_uses := {"acid": 0, "ice": 0, "iron": 0}
+var shot_uses := {"hydrogen": 0, "oxygen": 0, "carbon": 0, "iron": 0}
 var stability_bar: ProgressBar
 var oxygen_bar: ProgressBar
 var charge_bar: ProgressBar
@@ -52,7 +53,6 @@ var status_label: Label
 var objective_label: Label
 var stage_label: Label
 var sample_label: Label
-var cooldown_label: Label
 var slots: Array[Panel] = []
 var ui_layer: CanvasLayer
 var modal: Panel
@@ -87,12 +87,11 @@ func _ensure_input_actions() -> void:
 	var keys := {
 		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
 		"move_up": [KEY_W, KEY_UP], "move_down": [KEY_S, KEY_DOWN],
-		"jump": [KEY_K], "use_acid": [KEY_Q], "reset_demo": [KEY_R],
+		"jump": [KEY_K], "previous_element": [KEY_Q], "next_element": [KEY_E], "reset_demo": [KEY_R],
 		"dash": [KEY_L], "oxygen_normal": [KEY_J], "oxygen_skill": [KEY_U],
 		"sprint": [KEY_SHIFT],
 		"oxygen_skill2": [KEY_I], "oxygen_ultimate": [KEY_O],
-		"slot_1": [KEY_1], "slot_2": [KEY_2], "slot_3": [KEY_3],
-		"pause_demo": [KEY_ESCAPE], "skills": [KEY_TAB], "gravity_skill": [KEY_E]
+		"pause_demo": [KEY_ESCAPE], "skills": [KEY_TAB]
 	}
 	for action: String in keys:
 		if not InputMap.has_action(action):
@@ -102,14 +101,10 @@ func _ensure_input_actions() -> void:
 			event.physical_keycode = keycode
 			if not InputMap.action_has_event(action, event):
 				InputMap.action_add_event(action, event)
-	var mouse_buttons := {"throw_item": MOUSE_BUTTON_LEFT, "gravity_skill": MOUSE_BUTTON_RIGHT, "next_item": MOUSE_BUTTON_WHEEL_DOWN, "previous_item": MOUSE_BUTTON_WHEEL_UP}
-	for action: String in mouse_buttons:
-		if not InputMap.has_action(action):
-			InputMap.add_action(action)
-		var event := InputEventMouseButton.new()
-		event.button_index = mouse_buttons[action]
-		if not InputMap.action_has_event(action, event):
-			InputMap.action_add_event(action, event)
+	# Retire old actions even when a scene has already registered them.
+	for action in ["use_acid", "throw_item", "gravity_skill", "next_item", "previous_item", "slot_1", "slot_2", "slot_3"]:
+		if InputMap.has_action(action):
+			InputMap.erase_action(action)
 
 func _create_player() -> void:
 	player = CharacterBody2D.new()
@@ -125,13 +120,13 @@ func _create_player() -> void:
 	player.add_child(collider)
 	add_child(player)
 	player.stability_changed.connect(_on_stability_changed)
-	player.acid_requested.connect(_spawn_acid)
-	player.reagent_requested.connect(_spawn_reagent)
-	player.gravity_requested.connect(_gravity_pulse)
 	player.player_reset.connect(_on_player_reset)
 	player.jumped.connect(func(): audio.play_cue("jump"))
-	player.selection_changed.connect(func(): audio.play_cue("pickup"))
-	player.oxygen_projectile_requested.connect(_spawn_oxygen_projectile)
+	player.selection_changed.connect(func():
+		audio.play_cue("pickup")
+		_update_air_readout(1.0)
+	)
+	player.element_projectile_requested.connect(_spawn_element_projectile)
 	player.oxygen_pulse_requested.connect(_spawn_oxygen_pulse)
 	player.oxygen_energy_changed.connect(_on_oxygen_energy_changed)
 	player.charge_changed.connect(_on_charge_changed)
@@ -373,10 +368,9 @@ func _marker_activated(marker: Area2D) -> void:
 		if index >= active_checkpoint:
 			active_checkpoint = index
 			player.spawn_position = CHECKPOINTS[index]
-			player.available_reagents = maxi(player.available_reagents, index + 1)
 			player.restore_stability(100)
 			audio.play_cue("checkpoint")
-			_message("检查点已同步 · 当前段失败可恢复机关。" + (" 冷却胶囊和重力扰动已解锁。" if index == 1 else " 轻薄铁片已解锁。" if index == 2 else ""))
+			_message("检查点已同步 · 四元素始终可用。")
 	elif marker.kind == "exit":
 		_try_complete()
 
@@ -415,9 +409,6 @@ func _choose_route(route: String) -> void:
 	_message("出口能量锁已解除 · " + ("物理路线" if route == "physical" else "化学路线"))
 	audio.play_cue("checkpoint")
 
-func _spawn_acid(origin: Vector2, direction: Vector2) -> void:
-	_spawn_reagent(origin, direction, "acid")
-
 func _oxygen_target(node_name: String, pos: Vector2) -> void:
 	var target := StaticBody2D.new()
 	target.name = node_name
@@ -433,11 +424,13 @@ func _on_target_damage(amount: float, _kind: String) -> void:
 	player.gain_oxygen(minf(18, amount * 0.35))
 	audio.play_cue("reaction")
 
-func _spawn_oxygen_projectile(origin: Vector2, direction: Vector2, damage: float, kind: String) -> void:
+func _spawn_element_projectile(origin: Vector2, direction: Vector2, damage: float, kind: String, element: String) -> void:
 	if demo_complete or player.resetting or get_tree().paused:
 		return
 	var projectile := Area2D.new()
-	projectile.set_script(OXYGEN_PROJECTILE_SCRIPT)
+	projectile.set_script(ELEMENT_PROJECTILE_SCRIPT)
+	projectile.element = element
+	shot_uses[element] += 1
 	projectile.position = origin
 	projectile.direction = direction
 	projectile.damage = damage
@@ -495,40 +488,15 @@ func _update_air_readout(strength: float) -> void:
 	if not air_label or not muzzle_label:
 		return
 	air_label.text = "空气 %.2f kg/m³ · %.0f°C · 风 %.0f m/s" % [air_environment.air_density(), air_environment.temperature_k - 273.15, air_environment.wind_mps.x]
-	var shot := AIR_BALLISTICS.new()
+	var element: String = ELEMENTS.IDS[player.selected_element]
+	var shot: RefCounted = AIR_BALLISTICS.new() if ELEMENTS.is_gas(element) else load("res://solid_ballistics.gd").new()
+	if element == "hydrogen":
+		shot.molar_mass_ratio = 2.016 / 28.965
+		shot.mixing_per_second = 1.0
+	elif not ELEMENTS.is_gas(element):
+		shot.element = element
 	shot.launch(Vector2.RIGHT, strength, air_environment)
-	muzzle_label.text = "压缩气枪 · %.1f 倍储能 · 初速 %.1f m/s" % [strength, shot.initial_speed_mps]
-
-func _spawn_reagent(origin: Vector2, direction: Vector2, reagent: String) -> void:
-	if demo_complete or player.resetting:
-		return
-	item_uses[reagent] += 1
-	var bottle := Area2D.new()
-	bottle.name = "ReagentProjectile"
-	bottle.set_script(PROJECTILE_SCRIPT)
-	bottle.reagent = reagent
-	bottle.direction = direction
-	bottle.thrower = player
-	bottle.position = origin
-	bottle.process_mode = Node.PROCESS_MODE_PAUSABLE
-	var shape := CircleShape2D.new()
-	shape.radius = 8
-	var collider := CollisionShape2D.new()
-	collider.shape = shape
-	bottle.add_child(collider)
-	add_child(bottle)
-	bottle.add_to_group("projectiles")
-	audio.play_cue("throw")
-
-func _gravity_pulse(target: Vector2) -> void:
-	var applied := false
-	for platform in get_tree().get_nodes_in_group("gravity_affected"):
-		if platform.global_position.distance_to(target) <= 92 and platform.global_position.distance_to(player.global_position) <= 300:
-			platform.gravity_hit()
-			applied = true
-	_message("重力扰动：吊台开始上升，持续 4 秒。" if applied else "范围内没有可移动吊台，靠近青色平台再释放。")
-	if applied:
-		audio.play_cue("spring")
+	muzzle_label.text = "%s · %.1fx · %.1f m/s" % [ELEMENTS.WEAPONS[player.selected_element], strength, shot.initial_speed_mps]
 
 func _on_stability_changed(value: float, _maximum: float) -> void:
 	if stability_bar:
@@ -574,7 +542,7 @@ func _save_run() -> void:
 	var file := FileAccess.open("user://playtest_runs.jsonl", FileAccess.READ_WRITE if FileAccess.file_exists("user://playtest_runs.jsonl") else FileAccess.WRITE)
 	if file:
 		file.seek_end()
-		file.store_line(JSON.stringify({"version": "level-2", "seconds": elapsed, "deaths": deaths, "resets": resets, "samples": samples.size(), "route": final_route, "item_uses": item_uses}))
+		file.store_line(JSON.stringify({"version": "level-2", "seconds": elapsed, "deaths": deaths, "resets": resets, "samples": samples.size(), "route": final_route, "shot_uses": shot_uses}))
 
 func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("pause_demo") and menu_mode != "complete":
@@ -596,11 +564,12 @@ func _process(delta: float) -> void:
 		stage_label.text = "%d / 3  舱段  ·  %02d:%02d" % [active_checkpoint + 1, int(elapsed) / 60, int(elapsed) % 60]
 		sample_label.text = "◇  %d / %d" % [samples.size(), SAMPLE_COUNT]
 		objective_label.text = OBJECTIVES[active_checkpoint]
-		cooldown_label.text = "重力  %.1fs" % player.gravity_cooldown if player.gravity_cooldown > 0 else "重力  READY" if player.available_reagents >= 2 else "重力  LOCKED"
 		combat_label.text = "U %.1fs" % player.skill_cooldown if player.skill_cooldown > 0 else "U / O %d" % player.oxygen_energy
-		for index in range(3):
-			slots[index].modulate = Color.WHITE if index < player.available_reagents else Color(0.4, 0.5, 0.55)
-			slots[index].self_modulate = Color("#adffe8") if index == player.selected_reagent else Color.WHITE
+		for index in range(4):
+			var style := slots[index].get_theme_stylebox("panel") as StyleBoxFlat
+			style.border_color = ELEMENTS.TINTS[index] if index == player.selected_element else Color("#35545d")
+			style.set_border_width_all(2 if index == player.selected_element else 1)
+			slots[index].modulate = Color.WHITE if index == player.selected_element else Color(0.65, 0.65, 0.65)
 	if final_route != "" and not demo_complete:
 		var exit_node := zones[2].get_node("Exit") as Area2D
 		if exit_node.overlaps_body(player):
@@ -674,7 +643,7 @@ func _build_ui() -> void:
 	stability_bar.show_percentage = false
 	_style_meter(stability_bar, Color("#83d5ac"), Vector2(218, 12))
 	ui_layer.add_child(stability_bar)
-	_label("OXYGEN", Vector2(42, 88), 11, Color("#8aceda"), ui_layer)
+	_label("ENERGY", Vector2(42, 88), 11, Color("#8aceda"), ui_layer)
 	oxygen_bar = ProgressBar.new()
 	oxygen_bar.position = Vector2(140, 91)
 	oxygen_bar.max_value = player.MAX_OXYGEN
@@ -691,29 +660,27 @@ func _build_ui() -> void:
 	ui_layer.add_child(charge_bar)
 	combat_label = _label("", Vector2(365, 89), 11, Color("#8aceda"), ui_layer)
 	var atmosphere := OptionButton.new()
-	atmosphere.position = Vector2(700, 28)
+	atmosphere.position = Vector2(720, 28)
 	atmosphere.size = Vector2(150, 28)
 	for preset in AIR_ENVIRONMENT.PRESETS:
 		atmosphere.add_item(preset.name)
 	atmosphere.item_selected.connect(_on_atmosphere_selected)
 	ui_layer.add_child(atmosphere)
-	air_label = _label("", Vector2(700, 59), 10, Color("#9bd8d5"), ui_layer)
-	muzzle_label = _label("", Vector2(700, 78), 10, Color("#dfbd7d"), ui_layer)
+	air_label = _label("", Vector2(720, 59), 10, Color("#9bd8d5"), ui_layer)
+	muzzle_label = _label("", Vector2(720, 78), 10, Color("#dfbd7d"), ui_layer)
 	_update_air_readout(1.0)
-	var names := ["1  稀盐酸", "2  冷却胶囊", "3  轻薄铁片"]
-	for index in range(3):
-		var slot := _panel(Rect2(452 + index * 130, 32, 120, 55), ui_layer)
+	for index in range(4):
+		var slot := _panel(Rect2(452 + index * 63, 32, 59, 55), ui_layer)
 		slots.append(slot)
-		_label(names[index], Vector2(8, 6), 15, Color("#d7e9df"), slot)
-		_label("∞  实验补给" if index == 0 else "∞  冷却 6s" if index == 1 else "∞  电磁锁定", Vector2(8, 30), 11, Color("#86b3ad"), slot)
-	stage_label = _label("", Vector2(860, 31), 18, Color("#ead1a1"), ui_layer)
-	sample_label = _label("", Vector2(861, 64), 14, Color("#aadadd"), ui_layer)
-	cooldown_label = _label("", Vector2(965, 66), 13, Color("#91b8be"), ui_layer)
+		_label(ELEMENTS.NAMES[index], Vector2(10, 6), 18, ELEMENTS.TINTS[index], slot)
+		_label("气枪" if index < 2 else "固体", Vector2(8, 32), 11, Color("#86b3ad"), slot)
+	stage_label = _label("", Vector2(900, 31), 14, Color("#ead1a1"), ui_layer)
+	sample_label = _label("", Vector2(1020, 61), 12, Color("#aadadd"), ui_layer)
 	_panel(Rect2(20, 112, 1112, 53), ui_layer)
 	objective_label = _label("", Vector2(40, 114), 16, Color("#d3bc8a"), ui_layer)
 	status_label = _label("", Vector2(40, 139), 15, Color("#9cddc2"), ui_layer)
 	_panel(Rect2(20, 621, 1112, 26), ui_layer)
-	_label("A/D 移动  W/S 梯子  S 蹲伏  K 二段跳  L 冲刺  J/U/I/O 氧攻击  1–3 道具  Q/左键 投掷  E/右键 重力  R 恢复  Tab 技能  Esc 暂停", Vector2(32, 624), 12, Color("#9db9b8"), ui_layer)
+	_label("A/D 移动  W/S 梯子  S 趴下爬行  Q/E 切元素  J 普攻  K 跳跃  L 冲刺  U 技能  I 蓄力  O 大招  R 恢复  Tab 能力  Esc 暂停", Vector2(32, 624), 12, Color("#9db9b8"), ui_layer)
 	modal = _panel(Rect2(186, 165, 780, 418), ui_layer)
 	modal.mouse_filter = Control.MOUSE_FILTER_STOP
 	modal_title = _label("", Vector2(32, 24), 28, Color("#e6eddd"), modal)
@@ -730,11 +697,11 @@ func _show_modal(mode: String) -> void:
 	modal.visible = true
 	if mode == "complete":
 		modal_title.text = "实验舱已恢复供能"
-		modal_body.text = "路线：%s    用时：%02d:%02d    样本：%d / %d\n失败：%d    主动恢复：%d    道具使用：%d\n\n① 配重与滑轮：负载触发吊台和隔离门。\n② 酸与碳酸钙：反应改变固体障碍，产生二氧化碳。\n③ 冷却与相变：封闭制冷胶囊形成可融化的冰桥。\n\n时间、剂量与效果范围经过游戏化简化。" % ["物理 / 配重锁定" if final_route == "physical" else "化学 / 酸蚀释放", int(elapsed) / 60, int(elapsed) % 60, samples.size(), SAMPLE_COUNT, deaths, resets, item_uses.acid + item_uses.ice + item_uses.iron]
+		modal_body.text = "路线：%s    用时：%02d:%02d    样本：%d / %d\n失败：%d    主动恢复：%d    发射弹数：%d" % [final_route, int(elapsed) / 60, int(elapsed) % 60, samples.size(), SAMPLE_COUNT, deaths, resets, shot_uses.hydrogen + shot_uses.oxygen + shot_uses.carbon + shot_uses.iron]
 		modal_primary.text = "再试另一条路线"
 	else:
 		modal_title.text = "基础能力" if mode == "skills" else "实验暂停"
-		modal_body.text = "移动 · K 跳跃 / 二段跳，L 冲刺；W/S 梯子，S 蹲伏。\n氧元素 · J 普攻；U 冲击消耗 25 氧能量，冷却 4 秒。\n按住 I、松开释放蓄力；O 大招需要 100 氧能量。\n反应舱上层训练靶可练习攻击，命中补充氧能量。\n\n试剂 · 1 盐酸 / 2 冷却胶囊 / 3 铁片；Q 朝前，左键瞄准。\n试剂随检查点解锁，补给不限次数。\n重力 · 靠近青色吊台，E / 右键；持续及冷却均为 4 秒。\n\nR 恢复当前舱段和战斗状态，保留样本与解锁能力。"
+		modal_body.text = "Q 上一个 / E 下一个元素：氢 → 氧 → 碳 → 铁 → 氢。\n氢、氧使用压缩气枪；碳、铁使用固体发射器。\n\nJ 普攻；K 跳跃 / 二段跳；L 冲刺。\n按住 I，松开释放当前元素的蓄力弹。\nU 消耗 25 元素能量，冷却 4 秒；O 消耗 100 能量。\n氧使用范围冲击，其他元素使用三发 / 五发扇形射击。\n命中训练靶与蓄力释放补充能量，切换元素保留能量与冷却。\n\nA/D 移动，W/S 梯子，S 趴下爬行。\nR 恢复，Tab 能力面板，Esc 暂停。"
 		modal_primary.text = "继续实验"
 
 func _close_modal() -> void:
@@ -756,7 +723,8 @@ func _restart_demo() -> void:
 	elapsed = 0
 	deaths = 0
 	resets = 0
-	item_uses = {"acid": 0, "ice": 0, "iron": 0}
+	shot_uses = {"hydrogen": 0, "oxygen": 0, "carbon": 0, "iron": 0}
+	player.select_element(1)
 	demo_complete = false
 	for projectile in get_tree().get_nodes_in_group("projectiles"):
 		projectile.queue_free()
@@ -765,8 +733,6 @@ func _restart_demo() -> void:
 	zones.clear()
 	for index in range(3):
 		_build_zone(index)
-	player.available_reagents = 1
-	player.selected_reagent = 0
 	player.spawn_position = CHECKPOINTS[0]
 	player.global_position = CHECKPOINTS[0]
 	player.velocity = Vector2.ZERO
@@ -776,8 +742,6 @@ func _restart_demo() -> void:
 	player.jump_buffer = 0
 	player.coyote_remaining = 0
 	player.resetting = false
-	player.gravity_cooldown = 0
-	player.acid_cooldown = 0
 	player.reset_combat()
 	player._update_crouch(false)
 	player._update_visuals()
@@ -786,8 +750,10 @@ func _restart_demo() -> void:
 	_message("新实验开始 · 试试另一种解除出口锁的方法。")
 
 func _draw() -> void:
-	draw_rect(Rect2(-64, -64, LEVEL_WIDTH + 128, 1024), Color("#09191f"))
-	draw_rect(Rect2(0, 192, LEVEL_WIDTH, 650), Color("#10272f"))
+	draw_texture_rect(BACKGROUND_TEXTURE, Rect2(-64, -64, LEVEL_WIDTH + 128, 1024), true)
+	var playfield_tint := Color("#10272f")
+	playfield_tint.a = 0.28
+	draw_rect(Rect2(0, 192, LEVEL_WIDTH, 650), playfield_tint)
 	for zone_index in range(3):
 		var base := zone_index * ZONE_WIDTH
 		var tint: Color = [Color("#526955"), Color("#355e65"), Color("#625442")][zone_index]

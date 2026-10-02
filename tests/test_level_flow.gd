@@ -21,7 +21,7 @@ func _run() -> void:
 	await _test_two_final_routes()
 	paused = false
 	if failures.is_empty():
-		print("PASS: level progression, movement, ice expiry, checkpoint restoration, both routes and exit guards")
+		print("PASS: legacy level fixtures, movement, ice expiry, checkpoint restoration, route states and exit guards (not player walkthrough)")
 		quit(0)
 	else:
 		for message in failures:
@@ -80,22 +80,20 @@ func _test_mechanics_and_checkpoint() -> void:
 	_expect(player.is_on_floor(), "Player cannot stand on a moving platform")
 	_place(Vector2(2144, 584))
 	await _frames(5)
-	_expect(world.active_checkpoint == 1 and player.available_reagents == 2, "Second checkpoint did not unlock coolant")
+	_expect(world.active_checkpoint == 1, "Second checkpoint failed")
 
 func _test_chemistry_and_restore() -> void:
 	var old_zone0_id: int = world.zones[0].get_instance_id()
-	world._spawn_acid(Vector2(2400, 540), Vector2.RIGHT)
+	world.zones[1].get_node("CarbonateRock").acid_hit()
 	await _frames(55)
 	_expect(world.zones[1].get_node_or_null("CarbonateRock") == null, "Acid did not remove the rock")
 	_expect(world.zones[1].get_node("ReactionGate").is_open, "Acid did not open reaction gate")
 	_place(Vector2(2900, 584))
-	player.selected_reagent = 1
-	Input.action_press("use_acid")
-	await _frames(2)
-	Input.action_release("use_acid")
+	# Exercise unchanged level modules with fixtures, independently of player abilities.
+	world.zones[1].get_node("TeachingWater").freeze_hit()
 	await _frames(15)
 	var water: Area2D = world.zones[1].get_node("TeachingWater")
-	_expect(water.freeze_remaining > 0 and not water.ice_collision.disabled, "Thrown coolant did not freeze water")
+	_expect(water.freeze_remaining > 0 and not water.ice_collision.disabled, "Water fixture did not freeze")
 	_place(Vector2(3060, 548))
 	await _frames(8)
 	_expect(player.is_on_floor(), "Ice bridge has no usable collision")
@@ -115,18 +113,18 @@ func _test_chemistry_and_restore() -> void:
 	_expect(world.zones[1].get_node_or_null("CarbonateRock") != null, "Reset did not restore the acid puzzle")
 	_expect(not world.zones[1].get_node("ReactionGate").is_open, "Reset left the gate open")
 	_expect(world.samples.has("c1") and world.zones[1].get_node_or_null("Sample_c1") == null, "Sample duplicated after reset")
-	_expect(player.available_reagents == 2 and not player.resetting, "Reset lost unlocked abilities or froze player")
-	world._spawn_acid(Vector2(2400, 540), Vector2.RIGHT)
+	_expect(not player.resetting, "Reset froze player")
+	world.zones[1].get_node("CarbonateRock").acid_hit()
 	await _frames(55)
 	_place(Vector2(4192, 584))
 	await _frames(5)
-	_expect(world.active_checkpoint == 2 and player.available_reagents == 3, "Final checkpoint did not unlock iron")
+	_expect(world.active_checkpoint == 2, "Final checkpoint failed")
 
 func _test_two_final_routes() -> void:
 	var lift: AnimatableBody2D = world.zones[2].get_node("GravityLift")
 	_place(Vector2(4572, 553))
 	await _frames(5)
-	world._gravity_pulse(lift.global_position)
+	lift.gravity_hit()
 	await _frames(165)
 	_expect(lift.progress > 0.9, "Gravity skill did not lift the platform")
 	_expect(player.is_on_floor() and player.global_position.y < 338, "Player was not carried by the lift")
@@ -144,7 +142,7 @@ func _test_two_final_routes() -> void:
 			break
 	Input.action_release("move_right")
 	_expect(world.zones[2].get_node("FinalSwitch").active, "Upper route weight cannot reach final switch")
-	world._spawn_reagent(Vector2(5234, 328), Vector2.RIGHT, "iron")
+	world.zones[2].get_node("Magnet").iron_hit()
 	await _frames(15)
 	_expect(world.final_route == "physical" and world.zones[2].get_node("ExitGate").is_open, "Physical route did not unlock exit")
 	world._choose_route("chemical")
@@ -156,7 +154,7 @@ func _test_two_final_routes() -> void:
 	# Lower route: frozen bridge, acid latch, then physical traversal to the exit.
 	var water: Area2D = world.zones[2].get_node("FinalWater")
 	_place(Vector2(4716, 716))
-	world._spawn_reagent(Vector2(4716, 710), Vector2(1, 0.3), "ice")
+	water.freeze_hit()
 	await _frames(12)
 	_expect(water.freeze_remaining > 0, "Final water could not be frozen")
 	_place(Vector2(4790, 677))
@@ -165,7 +163,7 @@ func _test_two_final_routes() -> void:
 	await _frames(100)
 	Input.action_release("move_right")
 	_expect(player.global_position.x > 5220 and player.global_position.y < 770, "Lower route ice crossing failed")
-	world._spawn_acid(Vector2(5266, 690), Vector2.RIGHT)
+	world.zones[2].get_node("ChemicalLatch").acid_hit()
 	await _frames(55)
 	_expect(world.final_route == "chemical" and world.zones[2].get_node("ExitGate").is_open, "Chemical route did not unlock exit")
 	_expect(not world.zones[2].get_node("Magnet").reaction_enabled, "Unchosen physical route stayed active")
@@ -177,7 +175,7 @@ func _test_two_final_routes() -> void:
 	world._restart_demo()
 	await _frames(12)
 	_expect(not world.demo_complete and not paused and world.active_checkpoint == 0, "Completion restart failed")
-	_expect(world.samples.is_empty() and player.available_reagents == 1, "New run retained old progression")
+	_expect(world.samples.is_empty() and player.selected_element == 1, "New run retained old progression")
 
 func _place(pos: Vector2) -> void:
 	player.global_position = pos

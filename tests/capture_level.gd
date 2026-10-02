@@ -15,23 +15,20 @@ func _capture() -> void:
 	player.set_physics_process(false)
 	await _save_frame(world, "01-mechanics", Vector2(510, 584))
 	world.active_checkpoint = 1
-	player.available_reagents = 2
 	world.zones[1].get_node("TeachingWater").freeze_hit()
 	await _save_frame(world, "02-reactions", Vector2(3020, 558))
 	world.active_checkpoint = 2
-	player.available_reagents = 3
 	world.zones[2].get_node("GravityLift").activated = true
 	await _save_frame(world, "03-physical-route", Vector2(4810, 334))
 	world.zones[2].get_node("FinalWater").freeze_hit()
 	await _save_frame(world, "04-chemical-route", Vector2(4910, 684))
 	world.active_checkpoint = 1
-	player.available_reagents = 2
 	await _save_frame(world, "05-oxygen-training", Vector2(2678, 444))
 	world.active_checkpoint = 0
 	player._update_crouch(true)
 	player._update_visuals()
 	player.queue_redraw()
-	await _save_frame(world, "06-crouching", Vector2(190, 584))
+	await _save_frame(world, "06-prone-crawl", Vector2(190, 584))
 	player._update_crouch(false)
 	player.is_climbing = true
 	player._update_visuals()

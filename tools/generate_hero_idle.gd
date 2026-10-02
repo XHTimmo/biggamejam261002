@@ -7,6 +7,8 @@ const FRAME_COUNT := 4
 const MOTION_FRAME_COUNT := 6
 const JUMP_FRAME_COUNT := 9
 const ATTACK_FRAME_COUNT := 8
+const CROUCH_FRAME_COUNT := 4
+const CLIMB_FRAME_COUNT := 6
 const SYMBOLS := "0123456789ABCDEFGHIJKLMNOPQRSTUV"
 
 var pixels: Array = []
@@ -152,6 +154,8 @@ func _initialize() -> void:
 	_write_strip(_build_motion_frames(true), "res://assets/character/hero_run_strip.png")
 	_write_strip(_build_jump_frames(), "res://assets/character/hero_jump_strip.png")
 	_write_strip(_build_attack_frames(), "res://assets/character/hero_attack_strip.png")
+	_write_strip(_build_crouch_frames(), "res://assets/character/hero_crouch_strip.png")
+	_write_strip(_build_climb_frames(), "res://assets/character/hero_climb_strip.png")
 
 	var rows: Array[String] = []
 	for row in pixels:
@@ -172,6 +176,8 @@ func _initialize() -> void:
 	print("Generated hero run strip: res://assets/character/hero_run_strip.png")
 	print("Generated hero jump strip: res://assets/character/hero_jump_strip.png")
 	print("Generated hero attack strip: res://assets/character/hero_attack_strip.png")
+	print("Generated hero crouch strip: res://assets/character/hero_crouch_strip.png")
+	print("Generated hero climb strip: res://assets/character/hero_climb_strip.png")
 	quit()
 
 func _copy_pixels() -> Array:
@@ -328,6 +334,105 @@ func _build_attack_frames() -> Array:
 		_animate_oxygen_rig(frame, frame_index, body_offsets[frame_index])
 		frames.append(frame)
 	return frames
+
+func _build_crouch_frames() -> Array:
+	var frames: Array = []
+	var body_offsets: Array = [1, 0, 0, 1]
+	var front_arm_x: Array = [22, 23, 24, 22]
+	var front_arm_y: Array = [27, 28, 27, 26]
+	var front_leg_x: Array = [13, 14, 15, 13]
+	var front_boot_x: Array = [18, 19, 20, 18]
+	var rear_leg_x: Array = [9, 9, 10, 9]
+	var rear_boot_x: Array = [5, 6, 7, 5]
+	for frame_index in range(CROUCH_FRAME_COUNT):
+		var frame := _blank_frame()
+		var offset: int = body_offsets[frame_index]
+		# A low, horizontal silhouette with the head and hands reaching forward.
+		_rect_on(frame, 15, 12 + offset, 26, 23 + offset, "1")
+		_rect_on(frame, 17, 10 + offset, 24, 16 + offset, "C")
+		_rect_on(frame, 18, 13 + offset, 26, 19 + offset, "A")
+		_rect_on(frame, 21, 15 + offset, 27, 17 + offset, "B")
+		_rect_on(frame, 25, 17 + offset, 28, 18 + offset, "9")
+		_rect_on(frame, 18, 19 + offset, 23, 22 + offset, "H")
+		_rect_on(frame, 9, 22 + offset, 22, 33 + offset, "1")
+		_rect_on(frame, 11, 22 + offset, 20, 31 + offset, "F")
+		_rect_on(frame, 13, 23 + offset, 19, 31 + offset, "7")
+		_rect_on(frame, 14, 24 + offset, 16, 31 + offset, "8")
+		_rect_on(frame, 10, 24 + offset, 11, 31 + offset, "G")
+		_rect_on(frame, 19, 24 + offset, 22, 32 + offset, "G")
+		# Keep the oxygen pack readable while the body is close to the floor.
+		_rect_on(frame, 4, 22 + offset, 10, 35 + offset, "1")
+		_rect_on(frame, 5, 24 + offset, 8, 34 + offset, "K")
+		_rect_on(frame, 7, 25 + offset, 9, 33 + offset, "L")
+		_rect_on(frame, 8, 27 + offset, 8, 30 + offset, "M")
+		_rect_on(frame, front_arm_x[frame_index] - 2, front_arm_y[frame_index] - 1 + offset, front_arm_x[frame_index] + 2, front_arm_y[frame_index] + 4 + offset, "1")
+		_rect_on(frame, front_arm_x[frame_index] - 1, front_arm_y[frame_index] + offset, front_arm_x[frame_index] + 2, front_arm_y[frame_index] + 3 + offset, "G")
+		_rect_on(frame, front_arm_x[frame_index] + 1, front_arm_y[frame_index] + 3 + offset, front_arm_x[frame_index] + 4, front_arm_y[frame_index] + 5 + offset, "A")
+		_rect_on(frame, 12 - (frame_index % 2) * 2, 28 + offset, 17 - (frame_index % 2) * 2, 33 + offset, "1")
+		_rect_on(frame, 13 - (frame_index % 2) * 2, 29 + offset, 16 - (frame_index % 2) * 2, 33 + offset, "G")
+		_draw_rear_leg_at(frame, rear_leg_x[frame_index], rear_boot_x[frame_index], 31 + offset)
+		_draw_single_leg_at(frame, front_leg_x[frame_index], front_boot_x[frame_index], 30 + offset)
+		frames.append(frame)
+	return frames
+
+func _build_climb_frames() -> Array:
+	var frames: Array = []
+	var body_offsets: Array = [0, 1, 0, 1, 0, 1]
+	var left_hand_y: Array = [20, 25, 25, 20, 18, 23]
+	var right_hand_y: Array = [25, 20, 18, 23, 25, 20]
+	var left_foot_x: Array = [7, 10, 10, 7, 5, 9]
+	var right_foot_x: Array = [19, 16, 16, 19, 21, 17]
+	for frame_index in range(CLIMB_FRAME_COUNT):
+		var frame := _blank_frame()
+		var offset: int = body_offsets[frame_index]
+		# Symmetric shoulders and hair make the climbing pose read as back-facing.
+		_rect_on(frame, 10, 4 + offset, 21, 17 + offset, "1")
+		_rect_on(frame, 11, 5 + offset, 20, 10 + offset, "C")
+		_rect_on(frame, 9, 8 + offset, 22, 14 + offset, "D")
+		_rect_on(frame, 12, 10 + offset, 19, 17 + offset, "C")
+		_rect_on(frame, 14, 17 + offset, 17, 21 + offset, "1")
+		_rect_on(frame, 7, 20 + offset, 24, 34 + offset, "1")
+		_rect_on(frame, 9, 21 + offset, 22, 32 + offset, "F")
+		_rect_on(frame, 11, 22 + offset, 20, 32 + offset, "7")
+		_rect_on(frame, 14, 22 + offset, 17, 32 + offset, "8")
+		_rect_on(frame, 8, 23 + offset, 10, 31 + offset, "G")
+		_rect_on(frame, 21, 23 + offset, 23, 31 + offset, "G")
+		# Back-facing oxygen pack and hose sit between the shoulders.
+		_rect_on(frame, 5, 20 + offset, 10, 35 + offset, "1")
+		_rect_on(frame, 6, 22 + offset, 9, 34 + offset, "K")
+		_rect_on(frame, 8, 23 + offset, 10, 33 + offset, "L")
+		_rect_on(frame, 7, 25 + offset, 8, 31 + offset, "M")
+		_rect_on(frame, 9, 19 + offset, 12, 22 + offset, "1")
+		_rect_on(frame, 10, 20 + offset, 11, 22 + offset, "V")
+		_draw_back_arm(frame, 4, left_hand_y[frame_index] + offset, -1)
+		_draw_back_arm(frame, 23, right_hand_y[frame_index] + offset, 1)
+		_draw_back_leg(frame, left_foot_x[frame_index], 34 + offset, false)
+		_draw_back_leg(frame, right_foot_x[frame_index], 34 + offset, true)
+		frames.append(frame)
+	return frames
+
+func _blank_frame() -> Array:
+	var frame: Array = []
+	for y in range(HEIGHT):
+		var row: Array[String] = []
+		row.resize(WIDTH)
+		row.fill(".")
+		frame.append(row)
+	return frame
+
+func _draw_back_arm(target: Array, x: int, hand_y: int, side: int) -> void:
+	var elbow_x := x + side * 3
+	_rect_on(target, x, hand_y, elbow_x, hand_y + 8, "1")
+	_rect_on(target, x + side, hand_y + 1, elbow_x, hand_y + 6, "G")
+	_rect_on(target, x + side * 2, hand_y + 6, elbow_x + side, hand_y + 9, "A")
+
+func _draw_back_leg(target: Array, foot_x: int, base_y: int, right_side: bool) -> void:
+	var leg_x := foot_x + (1 if right_side else 0)
+	_rect_on(target, leg_x, base_y, leg_x + 4, base_y + 10, "1")
+	_rect_on(target, leg_x + 1, base_y + 2, leg_x + 3, base_y + 10, "3")
+	_rect_on(target, foot_x - 1, base_y + 9, foot_x + 6, base_y + 13, "1")
+	_rect_on(target, foot_x, base_y + 10, foot_x + 5, base_y + 12, "K")
+	_rect_on(target, foot_x, base_y + 13, foot_x + 6, base_y + 14, "L")
 
 func _draw_front_arm_pose(target: Array, arm_x: int, arm_y: int) -> void:
 	_rect_on(target, arm_x - 1, arm_y - 1, arm_x + 4, arm_y + 9, "1")

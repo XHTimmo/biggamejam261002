@@ -6,7 +6,10 @@ const HERO_WALK_STRIP_TEXTURE = preload("res://assets/character/hero_walk_strip.
 const HERO_RUN_STRIP_TEXTURE = preload("res://assets/character/hero_run_strip.png")
 const HERO_JUMP_STRIP_TEXTURE = preload("res://assets/character/hero_jump_strip.png")
 const HERO_ATTACK_STRIP_TEXTURE = preload("res://assets/character/hero_attack_strip.png")
-const COMPRESSED_AIR_GUN = preload("res://compressed_air_gun.gd")
+const HERO_CROUCH_STRIP_TEXTURE = preload("res://assets/character/hero_crouch_strip.png")
+const HERO_CLIMB_STRIP_TEXTURE = preload("res://assets/character/hero_climb_strip.png")
+const ELEMENT_WEAPON = preload("res://element_weapon.gd")
+const ELEMENTS = preload("res://element_catalog.gd")
 const HERO_DISPLAY_SCALE := 2.0
 const WEAPON_DISPLAY_SCALE := 0.75
 const WEAPON_ANCHOR_X := 12.0
@@ -15,20 +18,21 @@ const IDLE_FRAME_COUNT := 4
 const MOTION_FRAME_COUNT := 6
 const JUMP_FRAME_COUNT := 9
 const ATTACK_FRAME_COUNT := 8
+const CROUCH_FRAME_COUNT := 4
+const CLIMB_FRAME_COUNT := 6
 const IDLE_FRAME_DURATION := 0.17
 const WALK_FRAME_DURATION := 0.12
 const RUN_FRAME_DURATION := 0.08
 const ATTACK_FRAME_DURATION := 0.06
+const CROUCH_FRAME_DURATION := 0.18
+const CLIMB_FRAME_DURATION := 0.12
 const LANDING_FRAME_DURATION := 0.12
 
 signal stability_changed(value: float, maximum: float)
-signal acid_requested(origin: Vector2, direction: Vector2)
-signal reagent_requested(origin: Vector2, direction: Vector2, reagent: String)
-signal gravity_requested(target: Vector2)
 signal player_reset
 signal jumped
 signal selection_changed
-signal oxygen_projectile_requested(origin: Vector2, direction: Vector2, damage: float, attack_kind: String)
+signal element_projectile_requested(origin: Vector2, direction: Vector2, damage: float, attack_kind: String, element: String)
 signal oxygen_pulse_requested(origin: Vector2, radius: float, damage: float, attack_kind: String)
 signal oxygen_energy_changed(value: float, maximum: float)
 signal charge_changed(value: float, maximum: float)
@@ -40,7 +44,6 @@ const JUMP_VELOCITY := -620.0
 const MAX_STABILITY := 100.0
 const GRAVITY := 1500.0
 const CLIMB_SPEED := 210.0
-const REAGENTS := ["acid", "ice", "iron"]
 const MAX_OXYGEN := 100.0
 const SKILL_COST := 25.0
 const SKILL_COOLDOWN := 4.0
@@ -51,8 +54,6 @@ const DASH_COOLDOWN := 0.8
 
 var stability := MAX_STABILITY
 var spawn_position := Vector2.ZERO
-var acid_cooldown := 0.0
-var gravity_cooldown := 0.0
 var facing := 1.0
 var active_ladder: Area2D
 var is_climbing := false
@@ -62,8 +63,7 @@ var ladder_detach := 0.0
 var coyote_remaining := 0.0
 var jump_buffer := 0.0
 var double_jump_available := true
-var selected_reagent := 0
-var available_reagents := 1
+var selected_element := 1 # Start with oxygen; all four elements are always available.
 var resetting := false
 var reset_reason := "manual"
 var crouching := false
@@ -99,7 +99,7 @@ func _ready() -> void:
 	hero_sprite.frame = 0
 	hero_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(hero_sprite)
-	weapon_visual = COMPRESSED_AIR_GUN.new()
+	weapon_visual = ELEMENT_WEAPON.new()
 	weapon_visual.position = Vector2(WEAPON_ANCHOR_X, WEAPON_ANCHOR_Y * HERO_DISPLAY_SCALE)
 	weapon_visual.scale = Vector2(WEAPON_DISPLAY_SCALE, WEAPON_DISPLAY_SCALE)
 	weapon_visual.z_index = 1
@@ -112,27 +112,19 @@ func _physics_process(delta: float) -> void:
 	damage_flash = maxf(0, damage_flash - delta)
 	motion_clock += delta
 	ladder_detach = maxf(0, ladder_detach - delta)
-	acid_cooldown = maxf(0, acid_cooldown - delta)
-	gravity_cooldown = maxf(0, gravity_cooldown - delta)
 	skill_cooldown = maxf(0, skill_cooldown - delta)
 	dash_cooldown = maxf(0, dash_cooldown - delta)
 	dash_timer = maxf(0, dash_timer - delta)
-	if active_ladder and (not is_instance_valid(active_ladder) or not active_ladder.overlaps_body(self)):
+	if active_ladder and (not is_instance_valid(active_ladder) or absf(global_position.x - active_ladder.global_position.x) > 30.0 or not active_ladder.overlaps_body(self)):
 		active_ladder = null
 		is_climbing = false
 	if Input.is_action_just_pressed("reset_demo"):
 		reset_to_spawn()
 		return
-	for index in range(available_reagents):
-		if Input.is_action_just_pressed("slot_%d" % (index + 1)):
-			selected_reagent = index
-			selection_changed.emit()
-	if Input.is_action_just_pressed("next_item"):
-		selected_reagent = (selected_reagent + 1) % available_reagents
-		selection_changed.emit()
-	if Input.is_action_just_pressed("previous_item"):
-		selected_reagent = (selected_reagent + available_reagents - 1) % available_reagents
-		selection_changed.emit()
+	if Input.is_action_just_pressed("previous_element"):
+		select_element(selected_element - 1)
+	if Input.is_action_just_pressed("next_element"):
+		select_element(selected_element + 1)
 
 	var axis := Input.get_axis("move_left", "move_right")
 	var climb_axis := Input.get_axis("move_up", "move_down")
@@ -162,8 +154,12 @@ func _physics_process(delta: float) -> void:
 	if not launched and active_ladder and ladder_detach <= 0 and (is_climbing or absf(climb_axis) > 0.01):
 		is_climbing = true
 		double_jump_available = true
+		# Keep the character centered on the ladder rails while climbing.
+		global_position.x = active_ladder.global_position.x
+		velocity.x = 0.0
 		velocity.y = climb_axis * CLIMB_SPEED
-		velocity.x = axis * SPEED * 0.55
+		# Horizontal input cannot pull the character off the ladder rails.
+		velocity.x = 0.0
 		if jump_buffer > 0:
 			is_climbing = false
 			active_ladder = null
@@ -187,16 +183,7 @@ func _physics_process(delta: float) -> void:
 		if Input.is_action_just_released("jump") and velocity.y < -180:
 			velocity.y *= 0.55
 
-	if Input.is_action_just_pressed("use_acid") and acid_cooldown <= 0:
-		_start_attack_animation()
-		_throw(false)
-	if Input.is_action_just_pressed("throw_item") and acid_cooldown <= 0:
-		_throw(true)
-	if Input.is_action_just_pressed("gravity_skill") and gravity_cooldown <= 0 and available_reagents >= 2:
-		gravity_cooldown = 4
-		var offset := get_global_mouse_position() - global_position
-		gravity_requested.emit(global_position + offset.limit_length(220) if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) else global_position)
-	_process_oxygen_attacks(delta)
+	_process_element_attacks(delta)
 	if Input.is_action_just_pressed("dash") and dash_cooldown <= 0 and active_ladder == null and not crouching and not launched:
 		dash_direction = facing
 		dash_timer = DASH_DURATION
@@ -214,17 +201,17 @@ func _physics_process(delta: float) -> void:
 	_update_hero_animation(delta)
 	queue_redraw()
 
-func _process_oxygen_attacks(delta: float) -> void:
+func _process_element_attacks(delta: float) -> void:
 	if Input.is_action_just_pressed("oxygen_normal"):
 		_start_attack_animation()
 		last_compression_strength = 1.0
-		oxygen_projectile_requested.emit(_attack_origin(), Vector2(facing, -0.04), 12.0, "normal")
-		attack_state_changed.emit("氧元素普攻：氧气弹")
+		_fire_element("normal", ELEMENTS.NORMAL_DAMAGE[selected_element])
+		attack_state_changed.emit(ELEMENTS.NAMES[selected_element] + "元素普攻：" + ELEMENTS.NORMAL_NAMES[selected_element])
 	if Input.is_action_just_pressed("oxygen_skill2"):
 		charging = true
 		charge_time = 0
 		_start_attack_animation()
-		attack_state_changed.emit("技能 2 蓄力中：松开 I 释放压缩氧核")
+		attack_state_changed.emit("蓄力中：松开 I 释放" + ELEMENTS.CHARGED_NAMES[selected_element])
 	if charging:
 		charge_time = minf(MAX_CHARGE_TIME, charge_time + delta)
 		charge_changed.emit(charge_time, MAX_CHARGE_TIME)
@@ -232,9 +219,9 @@ func _process_oxygen_attacks(delta: float) -> void:
 		if not Input.is_action_pressed("oxygen_skill2"):
 			var ratio := clampf(charge_time / MAX_CHARGE_TIME, 0.2, 1.0)
 			last_compression_strength = 1.0 + 3.0 * ratio
-			oxygen_projectile_requested.emit(_attack_origin(), Vector2(facing, -0.04), lerpf(22.0, 70.0, ratio), "charged")
+			_fire_element("charged", lerpf(ELEMENTS.NORMAL_DAMAGE[selected_element], ELEMENTS.CHARGED_DAMAGE[selected_element], ratio))
 			gain_oxygen(12.0 + 18.0 * ratio)
-			attack_state_changed.emit("技能 2：压缩氧核 %.0f%%" % (ratio * 100))
+			attack_state_changed.emit("%s %.0f%%" % [ELEMENTS.CHARGED_NAMES[selected_element], ratio * 100])
 			charging = false
 			charge_time = 0
 			charge_changed.emit(0, MAX_CHARGE_TIME)
@@ -244,31 +231,59 @@ func _process_oxygen_attacks(delta: float) -> void:
 			_start_attack_animation()
 			consume_oxygen(SKILL_COST)
 			skill_cooldown = SKILL_COOLDOWN
-			oxygen_pulse_requested.emit(global_position + Vector2(118 * facing, -8), 165.0, 34.0, "skill")
-			attack_state_changed.emit("技能 1：氧化冲击")
+			if selected_element == 1:
+				oxygen_pulse_requested.emit(global_position + Vector2(118 * facing, -8), 165.0, 34.0, "skill")
+			else:
+				_fire_fan(3, false)
+			attack_state_changed.emit("U：" + ELEMENTS.NAMES[selected_element] + "元素连发")
 		else:
-			attack_state_changed.emit("技能未就绪：需要 25 氧能量并等待冷却")
+			attack_state_changed.emit("技能未就绪：需要 25 元素能量并等待冷却")
 	if Input.is_action_just_pressed("oxygen_ultimate"):
 		if oxygen_energy >= MAX_OXYGEN:
 			_start_attack_animation()
 			consume_oxygen(MAX_OXYGEN)
-			oxygen_pulse_requested.emit(global_position + Vector2(170 * facing, -12), 330.0, 120.0, "ultimate")
-			attack_state_changed.emit("大招：纯氧领域")
+			if selected_element == 1:
+				oxygen_pulse_requested.emit(global_position + Vector2(170 * facing, -12), 330.0, 120.0, "ultimate")
+			else:
+				_fire_fan(5, true)
+			attack_state_changed.emit("O：" + ELEMENTS.NAMES[selected_element] + "元素爆发")
 		else:
-			attack_state_changed.emit("大招未就绪：氧能量需要充满")
+			attack_state_changed.emit("大招未就绪：元素能量需要充满")
+
+func select_element(index: int) -> void:
+	selected_element = posmod(index, ELEMENTS.IDS.size())
+	# Never release ammunition from an element that was charged before switching.
+	charging = false
+	charge_time = 0.0
+	last_compression_strength = 1.0
+	charge_changed.emit(0, MAX_CHARGE_TIME)
+	weapon_visual.set_element(ELEMENTS.IDS[selected_element])
+	_update_hero_animation(0.0)
+	selection_changed.emit()
+	attack_state_changed.emit(ELEMENTS.NAMES[selected_element] + " · " + ELEMENTS.WEAPONS[selected_element])
+	queue_redraw()
+
+func _fire_element(kind: String, amount: float, angle := 0.0) -> void:
+	# Update the hand transform before sampling the muzzle on a turn-and-fire frame.
+	_update_hero_animation(0.0)
+	weapon_visual.fire()
+	element_projectile_requested.emit(_attack_origin(), Vector2(facing, -0.04).normalized().rotated(angle), amount, kind, ELEMENTS.IDS[selected_element])
+
+func _fire_fan(count: int, charged: bool) -> void:
+	last_compression_strength = 4.0 if charged else 1.0
+	for index in range(count):
+		var angle := (index - (count - 1) * 0.5) * 0.10
+		_fire_element("charged" if charged else "normal", ELEMENTS.CHARGED_DAMAGE[selected_element] if charged else ELEMENTS.NORMAL_DAMAGE[selected_element], angle)
 
 func _attack_origin() -> Vector2:
-	# compressed_air_gun.gd ends its barrel at local x=32; use that exact
-	# point so projectiles leave from the visible muzzle in either direction.
-	if weapon_visual:
-		return weapon_visual.to_global(Vector2(32.0, 0.0))
-	return global_position + Vector2(36.0 * facing, WEAPON_ANCHOR_Y * HERO_DISPLAY_SCALE)
+	return weapon_visual.to_global(weapon_visual.muzzle)
 
 func _update_hero_animation(delta: float) -> void:
 	if not hero_sprite:
 		return
-	hero_sprite.flip_h = facing < 0
+	hero_sprite.flip_h = false if is_climbing else facing < 0
 	if weapon_visual:
+		weapon_visual.visible = not is_climbing
 		var crouch_ratio := hero_sprite.scale.y / HERO_DISPLAY_SCALE
 		weapon_visual.position = Vector2(WEAPON_ANCHOR_X * facing, WEAPON_ANCHOR_Y * hero_sprite.scale.y)
 		weapon_visual.scale = Vector2(WEAPON_DISPLAY_SCALE * facing, WEAPON_DISPLAY_SCALE * crouch_ratio)
@@ -287,6 +302,16 @@ func _update_hero_animation(delta: float) -> void:
 			return
 		attack_animation_active = false
 		attack_animation_time = 0.0
+	if is_climbing:
+		_set_hero_animation_texture(HERO_CLIMB_STRIP_TEXTURE, CLIMB_FRAME_COUNT)
+		animation_time += delta
+		hero_sprite.frame = int(floor(animation_time / CLIMB_FRAME_DURATION)) % CLIMB_FRAME_COUNT
+		return
+	if crouching and is_on_floor():
+		_set_hero_animation_texture(HERO_CROUCH_STRIP_TEXTURE, CROUCH_FRAME_COUNT)
+		animation_time += delta
+		hero_sprite.frame = int(floor(animation_time / CROUCH_FRAME_DURATION)) % CROUCH_FRAME_COUNT
+		return
 	if not is_on_floor():
 		_set_hero_animation_texture(HERO_JUMP_STRIP_TEXTURE, JUMP_FRAME_COUNT)
 		hero_sprite.frame = 1 if velocity.y < -220 else 4 if velocity.y < 100 else 7
@@ -337,24 +362,13 @@ func reset_combat() -> void:
 func _update_visuals() -> void:
 	if not hero_sprite:
 		return
-	hero_sprite.flip_h = facing < 0
+	hero_sprite.flip_h = false if is_climbing else facing < 0
 	var visual_scale_y := HERO_DISPLAY_SCALE * (0.6 if crouching else 1.0)
 	hero_sprite.scale = Vector2(HERO_DISPLAY_SCALE, visual_scale_y)
 	# The 48px source frame has a 24px half-height; keep its feet on the
 	# capsule's bottom edge (y = 26) at both standing and crouching heights.
 	hero_sprite.position = Vector2(0, 26 - 24 * visual_scale_y)
 	hero_sprite.modulate = Color(1.8, 1.8, 1.8) if damage_flash > 0 else Color.WHITE
-
-func _throw(aim_at_mouse: bool) -> void:
-	acid_cooldown = 0.35
-	var reagent: String = REAGENTS[selected_reagent]
-	var direction := Vector2(facing, 0.3 if reagent == "ice" else -0.08).normalized()
-	if aim_at_mouse:
-		var offset := get_global_mouse_position() - global_position
-		if offset.length() > 8:
-			direction = offset.normalized()
-	var origin := global_position + direction * 29 + Vector2(0, -6)
-	reagent_requested.emit(origin, direction, reagent)
 
 func _update_crouch(wants_crouch: bool) -> void:
 	var collider := get_node("CollisionShape2D") as CollisionShape2D
@@ -379,6 +393,9 @@ func _update_crouch(wants_crouch: bool) -> void:
 func set_ladder(ladder: Area2D, entered: bool) -> void:
 	if entered and ladder_detach <= 0:
 		active_ladder = ladder
+		is_climbing = true
+		velocity.x = 0.0
+		global_position.x = ladder.global_position.x
 	elif active_ladder == ladder and not entered:
 		active_ladder = null
 		is_climbing = false
@@ -429,8 +446,6 @@ func reset_to_spawn(reason := "manual") -> void:
 	coyote_remaining = 0
 	jump_buffer = 0
 	double_jump_available = true
-	gravity_cooldown = 0
-	acid_cooldown = 0
 	stability = MAX_STABILITY
 	reset_combat()
 	_update_crouch(false)
@@ -439,8 +454,7 @@ func reset_to_spawn(reason := "manual") -> void:
 	player_reset.emit()
 
 func _draw() -> void:
-	var reagent_tint := [Color("#8ce3b5"), Color("#a2e0fa"), Color("#dfbd7d")]
-	draw_circle(Vector2(19 * facing, 5 if crouching else -7), 3, reagent_tint[selected_reagent])
+	draw_circle(Vector2(19 * facing, 5 if crouching else -7), 3, ELEMENTS.TINTS[selected_element])
 	if is_climbing:
 		draw_line(Vector2(-20, 6), Vector2(-20, -12), Color("#83d5ac"), 2)
 	if charging:
