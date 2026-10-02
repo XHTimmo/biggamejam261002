@@ -75,8 +75,8 @@ func _build_world() -> void:
 	player.position = Vector2(120, 520)
 	var player_shape := CollisionShape2D.new()
 	var capsule := CapsuleShape2D.new()
-	capsule.radius = 16.0
-	capsule.height = 52.0
+	capsule.radius = 20.0
+	capsule.height = 88.0
 	player_shape.shape = capsule
 	player.add_child(player_shape)
 	add_child(player)

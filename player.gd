@@ -41,6 +41,9 @@ func _ready() -> void:
 	hero_sprite = Sprite2D.new()
 	hero_sprite.texture = HERO_IDLE_TEXTURE
 	hero_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	hero_sprite.scale = Vector2(2.0, 2.0)
+	# Keep the enlarged sprite's feet aligned with the collision body's base.
+	hero_sprite.position = Vector2(0.0, -4.0)
 	add_child(hero_sprite)
 	queue_redraw()
 
