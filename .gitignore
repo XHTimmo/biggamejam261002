@@ -13,3 +13,7 @@ image.rar
 .DS_Store
 Thumbs.db
 artifacts/
+
+# Local export outputs
+*.exe
+*.pck

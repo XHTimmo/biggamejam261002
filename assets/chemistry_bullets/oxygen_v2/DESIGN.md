@@ -9,7 +9,7 @@
 | 普通爆炸 | 闪核 → 气云展开 → 冲击环破裂 → 六向气泡 → 消散 | 48×48，10 帧，24 FPS，约 0.42 秒 | 普通弹命中靶子或墙壁 |
 | 蓄力爆炸 | 更强的闪核与气云、金色碎光、八向气泡、较慢消散 | 64×64，12 帧，24 FPS，0.5 秒 | 蓄力弹命中靶子或墙壁 |
 
-全部精灵透明背景，朝右，水平排列。共享 `assets/palette.gd` 中的颜色，无抗锯齿、无渐变，运行时最近邻采样。核心固定，尾迹变化；朝左时水平镜像，不旋转整颗子弹。
+全部精灵透明背景，朝右，水平排列。共享 `scripts/shared/palette.gd` 中的颜色，无抗锯齿、无渐变，运行时最近邻采样。核心固定，尾迹变化；朝左时水平镜像，不旋转整颗子弹。
 
 普通弹枢轴为 (21, 8)，蓄力弹为 (31, 12)，两类爆炸分别为 (24, 24)、(32, 32)。Godot 的 Sprite2D 默认居中，因此运行时分别向尾部偏移 5 和 7 像素，使分子核心与碰撞中心对齐。碰撞圆半径分别为 8 和 15，气尾不计入碰撞范围。
 
@@ -22,7 +22,7 @@
 重新生成（在项目根目录执行）：
 
 ```powershell
-.\engine\Godot_v4.7.2-stable_win64_console.exe --headless --path . --log-file .godot/oxygen-generation.log --script tools/generate_oxygen_bullets.gd
+.\engine\Godot_v4.7.2-stable_win64_console.exe --headless --path . --log-file .godot/oxygen-generation.log --script tools/generators/generate_oxygen_bullets.gd
 ```
 
-子弹由压缩气枪发射。后续已接入空气密度、压缩储能、阻力、动能/集中度衰减、温度与浮力；伤害随距离衰减，耗尽后只散成气雾。命中爆炸与无命中消散分开处理。详细物理设定见项目根目录 `COMPRESSED_AIR_GUN.md`；`air_gun_preview.html` 可比较环境与轨迹。
+子弹由压缩气枪发射。后续已接入空气密度、压缩储能、阻力、动能/集中度衰减、温度与浮力；伤害随距离衰减，耗尽后只散成气雾。命中爆炸与无命中消散分开处理。详细物理设定见项目根目录 `../../doc/design/COMPRESSED_AIR_GUN.md`；`air_gun_preview.html` 可比较环境与轨迹。

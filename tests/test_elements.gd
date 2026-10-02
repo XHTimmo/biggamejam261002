@@ -1,10 +1,10 @@
 extends SceneTree
 
 const MAIN = preload("res://main.tscn")
-const CATALOG = preload("res://element_catalog.gd")
-const AIR = preload("res://air_gun_environment.gd")
-const GAS = preload("res://air_gun_ballistics.gd")
-const SOLID = preload("res://solid_ballistics.gd")
+const CATALOG = preload("res://scripts/shared/element_catalog.gd")
+const AIR = preload("res://scripts/combat/ballistics/air_gun_environment.gd")
+const GAS = preload("res://scripts/combat/ballistics/air_gun_ballistics.gd")
+const SOLID = preload("res://scripts/combat/ballistics/solid_ballistics.gd")
 var world: Node2D
 var player: CharacterBody2D
 var failures: Array[String] = []

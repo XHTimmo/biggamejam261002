@@ -53,6 +53,25 @@ func _run() -> void:
 	_expect(player.crouching, "Down input did not enter the prone crawl state")
 	_expect(player.hero_sprite.texture == CRAWL_TEXTURE, "Prone crawl state did not use the crawl strip")
 
+	# The first jump rolls in place; the follow-up jump keeps the jet-assisted
+	# state and leaves the roll transform cleared.
+	player.global_position = Vector2(300.0, 584.0)
+	player.velocity = Vector2.ZERO
+	player._update_crouch(false)
+	await _frames(3)
+	Input.action_press("jump")
+	await _frames(2)
+	Input.action_release("jump")
+	await _frames(2)
+	_expect(player.airborne_jump_mode == player.JUMP_MODE_ROLL, "First jump did not enter the roll animation")
+	_expect(absf(player.hero_sprite.rotation) > 0.01, "First jump roll did not rotate the hero sprite")
+	Input.action_press("jump")
+	await _frames(2)
+	Input.action_release("jump")
+	_expect(player.airborne_jump_mode == player.JUMP_MODE_JET, "Second jump did not switch to the jet animation")
+	_expect(not player.air_spray_available and player.air_spray_timer > 0, "Second jump did not preserve the jet boost")
+	_expect(is_zero_approx(player.hero_sprite.rotation), "Jet jump retained the first-jump roll rotation")
+
 	world.queue_free()
 	await process_frame
 	if failures.is_empty():

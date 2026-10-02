@@ -1,0 +1,14 @@
+{
+  "id": "EN-04",
+  "name": "铁幕哨卫",
+  "name_en": "Iron Sentinel",
+  "role": "shield_turret",
+  "max_health": 210,
+  "shield": 80,
+  "projectile_damage": 22,
+  "fire_interval": 2.2,
+  "fire_range": 460,
+  "element_multiplier": {"hydrogen": 1.10, "oxygen": 0.90, "carbon": 1.35, "iron": 0.55},
+  "status_lesson": "carbon breaks the shield efficiently; iron is resisted",
+  "palette": {"outline": "#142238", "armor": "#6B8092", "visor": "#F2C45F", "shield": "#6FC7E8"}
+}

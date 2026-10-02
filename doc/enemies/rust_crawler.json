@@ -1,0 +1,13 @@
+{
+  "id": "EN-02",
+  "name": "锈壳潜行虫",
+  "name_en": "Rust Crawler",
+  "role": "fast_melee",
+  "max_health": 155,
+  "contact_damage": 24,
+  "move_speed": 102,
+  "attack": {"windup": 0.34, "dash_time": 0.28, "dash_speed": 300, "recovery": 0.46},
+  "element_multiplier": {"hydrogen": 1.15, "oxygen": 0.75, "carbon": 0.90, "iron": 1.35},
+  "status_lesson": "oxygen weakens it, iron bursts it, hydrogen pushes it away",
+  "palette": {"outline": "#142238", "shell": "#AABFD0", "rust_core": "#D9854B", "warning": "#F2C45F"}
+}

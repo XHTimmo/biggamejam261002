@@ -1,6 +1,6 @@
 extends SceneTree
 
-const WORKBENCH := preload("res://tools/pixel_workbench.tscn")
+const WORKBENCH := preload("res://tools/pixel_workbench/pixel_workbench.tscn")
 
 func _initialize() -> void:
 	call_deferred("_run")

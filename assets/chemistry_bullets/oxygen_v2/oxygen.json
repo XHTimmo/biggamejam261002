@@ -57,5 +57,5 @@
 		]
 	},
 	"orientation": "right",
-	"palette": "res://assets/palette.gd"
+	"palette": "res://scripts/shared/palette.gd"
 }

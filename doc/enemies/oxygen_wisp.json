@@ -1,0 +1,13 @@
+{
+  "id": "EN-03",
+  "name": "氧雾漂浮体",
+  "name_en": "Oxygen Wisp",
+  "role": "flying_ranged",
+  "max_health": 90,
+  "projectile_damage": 16,
+  "fire_interval": 1.8,
+  "fire_range": 360,
+  "element_multiplier": {"hydrogen": 0.85, "oxygen": 0.55, "carbon": 1.25, "iron": 1.10},
+  "status_lesson": "carbon is the reliable counter; oxygen is inefficient",
+  "palette": {"outline": "#142238", "body": "#2D9AA0", "core": "#9AF5E5", "trail": "#55D9D3"}
+}

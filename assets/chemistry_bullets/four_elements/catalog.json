@@ -265,7 +265,7 @@
 	},
 	"filter": "nearest",
 	"orientation": "right",
-	"palette": "res://assets/palette.gd",
+	"palette": "res://scripts/shared/palette.gd",
 	"status": "design_prototype",
 	"weapons": {
 		"compressed_air_gun": {
