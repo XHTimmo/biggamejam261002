@@ -1,6 +1,10 @@
 # Local engine binaries
 engine/
 
+# External asset staging area (only copied project assets are tracked)
+image/
+image.rar
+
 # Godot-generated project data
 .godot/
 *.import
@@ -8,4 +12,3 @@ engine/
 # OS/editor noise
 .DS_Store
 Thumbs.db
-
