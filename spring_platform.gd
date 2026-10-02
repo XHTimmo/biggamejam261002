@@ -6,16 +6,29 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	queue_redraw()
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	bounce_lock = maxf(0.0, bounce_lock - delta)
+	if bounce_lock > 0.0:
+		return
+	for body in get_overlapping_bodies():
+		if _try_bounce(body):
+			return
 
 func _on_body_entered(body: Node2D) -> void:
 	if bounce_lock > 0.0:
 		return
-	if body is CharacterBody2D and body.global_position.y < global_position.y + 8.0:
-		body.velocity.y = -780.0
+	_try_bounce(body)
+
+func _try_bounce(body: Node2D) -> bool:
+	if body is CharacterBody2D and body.global_position.y < global_position.y + 8.0 and body.velocity.y >= 0:
+		if body.has_method("spring_launch"):
+			body.spring_launch(-780.0)
+		else:
+			body.velocity.y = -780.0
 		bounce_lock = 0.18
 		queue_redraw()
+		return true
+	return false
 
 func _draw() -> void:
 	draw_rect(Rect2(-64, -8, 128, 16), Color("#d99b4a"), true)

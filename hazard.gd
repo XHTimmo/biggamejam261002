@@ -1,6 +1,8 @@
 extends Area2D
 
 @export var damage_per_second := 14.0
+@export var hazard_size := Vector2(180, 24)
+@export var hot := false
 var player_inside := false
 var tick := 0.0
 
@@ -28,7 +30,8 @@ func _on_body_exited(body: Node2D) -> void:
 		player_inside = false
 
 func _draw() -> void:
-	draw_rect(Rect2(-90, -8, 180, 16), Color("#bd5a8f"), true)
-	for x in range(-70, 71, 28):
-		draw_circle(Vector2(x, -13 - sin(float(x)) * 2.0), 5.0, Color("#f27fbe"))
+	var tint := Color("#ee9768") if hot else Color("#df72a6")
+	draw_rect(Rect2(-hazard_size * 0.5, hazard_size), tint.darkened(0.5))
+	for x in range(int(-hazard_size.x / 2) + 14, int(hazard_size.x / 2), 28):
+		draw_circle(Vector2(x, -hazard_size.y / 2), 5, tint)
 
