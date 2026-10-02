@@ -1,0 +1,314 @@
+{
+	"elements": {
+		"carbon": {
+			"charged": {
+				"flight": {
+					"file": "carbon/charged_flight_strip.png",
+					"fps": 16,
+					"frames": 8,
+					"loop": true,
+					"pivot": [
+						31,
+						12
+					],
+					"size": [
+						48,
+						24
+					]
+				},
+				"impact": {
+					"file": "carbon/charged_impact_strip.png",
+					"fps": 24,
+					"frames": 12,
+					"loop": false,
+					"pivot": [
+						32,
+						32
+					],
+					"size": [
+						64,
+						64
+					]
+				}
+			},
+			"normal": {
+				"flight": {
+					"file": "carbon/normal_flight_strip.png",
+					"fps": 16,
+					"frames": 8,
+					"loop": true,
+					"pivot": [
+						21,
+						8
+					],
+					"size": [
+						32,
+						16
+					]
+				},
+				"impact": {
+					"file": "carbon/normal_impact_strip.png",
+					"fps": 24,
+					"frames": 10,
+					"loop": false,
+					"pivot": [
+						24,
+						24
+					],
+					"size": [
+						48,
+						48
+					]
+				}
+			}
+		},
+		"conditional_hydrogen_reaction": {
+			"file": "hydrogen/ignited_reaction_strip.png",
+			"fps": 24,
+			"frames": 12,
+			"loop": false,
+			"pivot": [
+				32,
+				32
+			],
+			"size": [
+				64,
+				64
+			]
+		},
+		"hydrogen": {
+			"charged": {
+				"flight": {
+					"file": "hydrogen/charged_flight_strip.png",
+					"fps": 16,
+					"frames": 8,
+					"loop": true,
+					"pivot": [
+						31,
+						12
+					],
+					"size": [
+						48,
+						24
+					]
+				},
+				"impact": {
+					"file": "hydrogen/charged_impact_strip.png",
+					"fps": 24,
+					"frames": 12,
+					"loop": false,
+					"pivot": [
+						32,
+						32
+					],
+					"size": [
+						64,
+						64
+					]
+				}
+			},
+			"normal": {
+				"flight": {
+					"file": "hydrogen/normal_flight_strip.png",
+					"fps": 16,
+					"frames": 8,
+					"loop": true,
+					"pivot": [
+						21,
+						8
+					],
+					"size": [
+						32,
+						16
+					]
+				},
+				"impact": {
+					"file": "hydrogen/normal_impact_strip.png",
+					"fps": 24,
+					"frames": 10,
+					"loop": false,
+					"pivot": [
+						24,
+						24
+					],
+					"size": [
+						48,
+						48
+					]
+				}
+			}
+		},
+		"iron": {
+			"charged": {
+				"flight": {
+					"file": "iron/charged_flight_strip.png",
+					"fps": 16,
+					"frames": 8,
+					"loop": true,
+					"pivot": [
+						31,
+						12
+					],
+					"size": [
+						48,
+						24
+					]
+				},
+				"impact": {
+					"file": "iron/charged_impact_strip.png",
+					"fps": 24,
+					"frames": 12,
+					"loop": false,
+					"pivot": [
+						32,
+						32
+					],
+					"size": [
+						64,
+						64
+					]
+				}
+			},
+			"normal": {
+				"flight": {
+					"file": "iron/normal_flight_strip.png",
+					"fps": 16,
+					"frames": 8,
+					"loop": true,
+					"pivot": [
+						21,
+						8
+					],
+					"size": [
+						32,
+						16
+					]
+				},
+				"impact": {
+					"file": "iron/normal_impact_strip.png",
+					"fps": 24,
+					"frames": 10,
+					"loop": false,
+					"pivot": [
+						24,
+						24
+					],
+					"size": [
+						48,
+						48
+					]
+				}
+			}
+		},
+		"oxygen": {
+			"charged": {
+				"flight": {
+					"file": "oxygen/charged_flight_strip.png",
+					"fps": 16,
+					"frames": 8,
+					"loop": true,
+					"pivot": [
+						31,
+						12
+					],
+					"size": [
+						48,
+						24
+					]
+				},
+				"impact": {
+					"file": "oxygen/charged_impact_strip.png",
+					"fps": 24,
+					"frames": 12,
+					"loop": false,
+					"pivot": [
+						32,
+						32
+					],
+					"size": [
+						64,
+						64
+					]
+				}
+			},
+			"normal": {
+				"flight": {
+					"file": "oxygen/normal_flight_strip.png",
+					"fps": 16,
+					"frames": 8,
+					"loop": true,
+					"pivot": [
+						21,
+						8
+					],
+					"size": [
+						32,
+						16
+					]
+				},
+				"impact": {
+					"file": "oxygen/normal_impact_strip.png",
+					"fps": 24,
+					"frames": 10,
+					"loop": false,
+					"pivot": [
+						24,
+						24
+					],
+					"size": [
+						48,
+						48
+					]
+				}
+			}
+		}
+	},
+	"filter": "nearest",
+	"orientation": "right",
+	"palette": "res://assets/palette.gd",
+	"status": "design_prototype",
+	"weapons": {
+		"compressed_air_gun": {
+			"file": "compressed_air_gun_shot_strip.png",
+			"fps": 16,
+			"frames": 6,
+			"loop": false,
+			"pivot": [
+				22,
+				18
+			],
+			"size": [
+				64,
+				32
+			]
+		},
+		"solid_launcher": {
+			"file": "solid_launcher_shot_strip.png",
+			"fps": 16,
+			"frames": 6,
+			"loop": false,
+			"pivot": [
+				22,
+				18
+			],
+			"size": [
+				64,
+				32
+			]
+		},
+		"solid_reload": {
+			"file": "solid_launcher_reload_strip.png",
+			"fps": 12,
+			"frames": 8,
+			"loop": false,
+			"pivot": [
+				22,
+				18
+			],
+			"size": [
+				64,
+				32
+			]
+		}
+	}
+}

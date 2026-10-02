@@ -1,4 +1,4 @@
-# 稳态：反应舱
+﻿# 稳态：反应舱
 
 Godot 4.7.2 的单关卡 2D 平台解谜 Demo。当前关卡有三个连续舱段：力学检修、反应与相变、双路线平衡控制。关卡长度 6144 px，逻辑画面 1152×648。
 
@@ -61,3 +61,9 @@ powershell -ExecutionPolicy Bypass -File .\tools\test_demo.ps1
 包含 7 项场景测试：出生落地、原有交互、分区恢复和路线状态、两种**只使用玩家输入的连续通关测试**、真实 K/L 按键及攻击/冲刺/暂停/重置、像素工作台加载。测试不写玩家统计；正常通关统计仅记录到本机 `user://playtest_runs.jsonl`。
 
 关卡布局、公开参考来源与验收边界见 [LEVEL_DESIGN.md](LEVEL_DESIGN.md)。实际渲染预览放在 `artifacts/previews/`。布局和行为是项目内实现；没有导入他人的地图、音乐或贴图。
+
+## 氧元素像素子弹与压缩气枪
+
+J 普攻与 I 蓄力攻击使用“双氧脉冲”像素动画：O₂ 双球核心、气泡尾迹、压缩气壳和命中消散。打开 `assets/chemistry_bullets/oxygen_v2/preview.html` 可查看动画及原尺寸效果；设计说明见同目录 `DESIGN.md`。
+
+武器名为**压缩气枪**。气弹会受到空气密度、风、平方阻力、混合和浮力影响，距离越远伤害越低；耗尽后成为无伤害气雾。游戏 HUD 可切换常温、稀薄空气、冷空气、热氧弹与气流环境，查看当前密度和枪口初速。物理设定见 `COMPRESSED_AIR_GUN.md`，轨迹预览见 `assets/chemistry_bullets/oxygen_v2/air_gun_preview.html`。

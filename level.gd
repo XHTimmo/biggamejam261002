@@ -18,6 +18,8 @@ const AUDIO_SCRIPT = preload("res://lab_audio.gd")
 const OXYGEN_PROJECTILE_SCRIPT = preload("res://oxygen_projectile.gd")
 const OXYGEN_PULSE_SCRIPT = preload("res://oxygen_pulse.gd")
 const TARGET_SCRIPT = preload("res://target_dummy.gd")
+const AIR_ENVIRONMENT = preload("res://air_gun_environment.gd")
+const AIR_BALLISTICS = preload("res://air_gun_ballistics.gd")
 
 const ZONE_WIDTH := 2048
 const LEVEL_WIDTH := ZONE_WIDTH * 3
@@ -62,6 +64,9 @@ var menu_mode := ""
 var status_time := 0.0
 var audio: Node
 var world_font: SystemFont
+var air_environment: Resource = AIR_ENVIRONMENT.new()
+var air_label: Label
+var muzzle_label: Label
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -84,6 +89,7 @@ func _ensure_input_actions() -> void:
 		"move_up": [KEY_W, KEY_UP], "move_down": [KEY_S, KEY_DOWN],
 		"jump": [KEY_K], "use_acid": [KEY_Q], "reset_demo": [KEY_R],
 		"dash": [KEY_L], "oxygen_normal": [KEY_J], "oxygen_skill": [KEY_U],
+		"sprint": [KEY_SHIFT],
 		"oxygen_skill2": [KEY_I], "oxygen_ultimate": [KEY_O],
 		"slot_1": [KEY_1], "slot_2": [KEY_2], "slot_3": [KEY_3],
 		"pause_demo": [KEY_ESCAPE], "skills": [KEY_TAB], "gravity_skill": [KEY_E]
@@ -436,6 +442,8 @@ func _spawn_oxygen_projectile(origin: Vector2, direction: Vector2, damage: float
 	projectile.direction = direction
 	projectile.damage = damage
 	projectile.attack_kind = kind
+	projectile.compression_strength = player.last_compression_strength if kind == "charged" else 1.0
+	projectile.environment = air_environment
 	projectile.collision_layer = 0
 	projectile.collision_mask = 3
 	var shape := CircleShape2D.new()
@@ -477,6 +485,19 @@ func _on_charge_changed(value: float, maximum: float) -> void:
 	if charge_bar:
 		charge_bar.max_value = maximum
 		charge_bar.value = value
+	_update_air_readout(1.0 + 3.0 * clampf(value / maxf(0.01, maximum), 0.0, 1.0))
+
+func _on_atmosphere_selected(index: int) -> void:
+	air_environment.apply_preset(index)
+	_update_air_readout(1.0)
+
+func _update_air_readout(strength: float) -> void:
+	if not air_label or not muzzle_label:
+		return
+	air_label.text = "空气 %.2f kg/m³ · %.0f°C · 风 %.0f m/s" % [air_environment.air_density(), air_environment.temperature_k - 273.15, air_environment.wind_mps.x]
+	var shot := AIR_BALLISTICS.new()
+	shot.launch(Vector2.RIGHT, strength, air_environment)
+	muzzle_label.text = "压缩气枪 · %.1f 倍储能 · 初速 %.1f m/s" % [strength, shot.initial_speed_mps]
 
 func _spawn_reagent(origin: Vector2, direction: Vector2, reagent: String) -> void:
 	if demo_complete or player.resetting:
@@ -669,6 +690,16 @@ func _build_ui() -> void:
 	_style_meter(charge_bar, Color("#dfbd7d"), Vector2(68, 12))
 	ui_layer.add_child(charge_bar)
 	combat_label = _label("", Vector2(365, 89), 11, Color("#8aceda"), ui_layer)
+	var atmosphere := OptionButton.new()
+	atmosphere.position = Vector2(700, 28)
+	atmosphere.size = Vector2(150, 28)
+	for preset in AIR_ENVIRONMENT.PRESETS:
+		atmosphere.add_item(preset.name)
+	atmosphere.item_selected.connect(_on_atmosphere_selected)
+	ui_layer.add_child(atmosphere)
+	air_label = _label("", Vector2(700, 59), 10, Color("#9bd8d5"), ui_layer)
+	muzzle_label = _label("", Vector2(700, 78), 10, Color("#dfbd7d"), ui_layer)
+	_update_air_readout(1.0)
 	var names := ["1  稀盐酸", "2  冷却胶囊", "3  轻薄铁片"]
 	for index in range(3):
 		var slot := _panel(Rect2(452 + index * 130, 32, 120, 55), ui_layer)

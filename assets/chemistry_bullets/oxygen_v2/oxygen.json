@@ -1,0 +1,61 @@
+{
+	"charged": {
+		"file": "oxygen_charged_strip.png",
+		"fps": 16,
+		"frame_size": [
+			48,
+			24
+		],
+		"frames": 8,
+		"loop": true,
+		"pivot": [
+			31,
+			12
+		]
+	},
+	"charged_impact": {
+		"file": "oxygen_charged_impact_strip.png",
+		"fps": 24,
+		"frame_size": [
+			64,
+			64
+		],
+		"frames": 12,
+		"loop": false,
+		"pivot": [
+			32,
+			32
+		]
+	},
+	"filter": "nearest",
+	"impact": {
+		"file": "oxygen_impact_strip.png",
+		"fps": 24,
+		"frame_size": [
+			48,
+			48
+		],
+		"frames": 10,
+		"loop": false,
+		"pivot": [
+			24,
+			24
+		]
+	},
+	"normal": {
+		"file": "oxygen_normal_strip.png",
+		"fps": 16,
+		"frame_size": [
+			32,
+			16
+		],
+		"frames": 8,
+		"loop": true,
+		"pivot": [
+			21,
+			8
+		]
+	},
+	"orientation": "right",
+	"palette": "res://assets/palette.gd"
+}

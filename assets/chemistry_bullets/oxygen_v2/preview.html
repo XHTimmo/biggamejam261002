@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>双氧脉冲 · 飞行与爆炸动画</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b1220;color:#d8ffff;font:16px/1.7 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1140px;margin:auto;padding:36px 28px}small{color:#55d9d3;letter-spacing:.16em}h1{font-size:36px;margin:8px 0}p{color:#8da7be;max-width:850px}header{border-left:4px solid #55d9d3;padding-left:24px;margin-bottom:28px}.controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px}button,select{font:inherit;background:#142238;color:#d8ffff;border:1px solid #1f6874;border-radius:6px;padding:6px 14px;cursor:pointer}button.active{background:#1f6874}.cards{display:grid;grid-template-columns:1fr 1fr;gap:20px}.card,.stage{background:#142238;border:1px solid #263957;padding:20px;border-radius:10px}.stage{margin-bottom:20px}h2{font-size:20px;margin:0 0 3px}.note{color:#8da7be;font-size:13px}canvas{display:block;width:100%;height:200px;image-rendering:pixelated;margin:16px 0;background:repeating-conic-gradient(#101c2e 0% 25%,#142238 0% 50%) 0/24px 24px;border-radius:5px}.light canvas{background:repeating-conic-gradient(#e7e3d2 0% 25%,#f7f4e7 0% 50%) 0/24px 24px}.actual{height:48px;margin:8px 0}.legend{font-size:14px;color:#9af5e5}.scrub{display:flex;gap:14px;align-items:center}.scrub input{flex:1;accent-color:#55d9d3;min-width:60px}.scrub output{min-width:86px;font-size:13px;font-variant-numeric:tabular-nums;color:#8da7be}.stage canvas{height:220px}img{width:100%;height:auto;image-rendering:pixelated;margin-top:24px;border:1px solid #263957;border-radius:8px}footer{margin-top:20px;color:#8da7be;font-size:13px}@media(max-width:700px){.cards{grid-template-columns:1fr}main{padding:24px 16px}h1{font-size:28px}}
+</style>
+<main>
+<header><small>O₂ · FLIGHT / EXPLOSION</small><h1>双氧脉冲 · 动画设计</h1><p>飞行中双球脉动、气泡向后流动；命中后亮核闪烁，气云扩张为空心冲击环，再破裂成微泡消散。蓄力弹有独立的气壳与更强的爆炸。</p></header>
+<div class="controls"><button id="pause">暂停动画</button><button id="bg">切换浅色背景</button><label>速度 <select id="speed"><option value="0.25">0.25 倍</option><option value="0.5">0.5 倍</option><option value="1" selected>1 倍</option><option value="2">2 倍</option></select></label></div>
+<section class="stage"><div class="controls"><h2>飞行 → 命中 → 爆炸</h2><button id="normalMode" class="active">普通弹</button><button id="chargedMode">蓄力弹</button><button id="replay">重新发射</button></div><canvas id="scene" width="1024" height="220"></canvas><span id="phase" class="note">飞行中</span></section>
+<section class="cards">
+<article class="card"><h2>01 普通弹 · 飞行</h2><span class="note">32 × 16 · 8 帧 · 16 FPS · 周期 0.5 秒</span><canvas id="normal" width="492" height="200"></canvas><div class="scrub"><input id="normalSlider" type="range" min="0" max="7" value="0" aria-label="普通弹飞行帧"><output id="normalFrame"></output></div><canvas class="actual" id="normalActual" width="492" height="48"></canvas><div class="legend">双球脉动 / 双键明暗 / 气泡向后漂移</div></article>
+<article class="card"><h2>02 蓄力弹 · 飞行</h2><span class="note">48 × 24 · 8 帧 · 16 FPS · 周期 0.5 秒</span><canvas id="charged" width="492" height="200"></canvas><div class="scrub"><input id="chargedSlider" type="range" min="0" max="7" value="0" aria-label="蓄力弹飞行帧"><output id="chargedFrame"></output></div><canvas class="actual" id="chargedActual" width="492" height="48"></canvas><div class="legend">气壳呼吸 / 环绕高光 / 金色压力线</div></article>
+<article class="card"><h2>03 普通弹 · 爆炸</h2><span class="note">48 × 48 · 10 帧 · 24 FPS · 约 0.42 秒</span><canvas id="impact" width="492" height="200"></canvas><div class="scrub"><input id="impactSlider" type="range" min="0" max="9" value="0" aria-label="普通爆炸帧"><output id="impactFrame"></output></div><div class="legend">闪光 → 气云 → 冲击环 → 六向气泡 → 消散</div></article>
+<article class="card"><h2>04 蓄力弹 · 爆炸</h2><span class="note">64 × 64 · 12 帧 · 24 FPS · 0.5 秒</span><canvas id="charged_impact" width="492" height="200"></canvas><div class="scrub"><input id="charged_impactSlider" type="range" min="0" max="11" value="0" aria-label="蓄力爆炸帧"><output id="charged_impactFrame"></output></div><div class="legend">更强的闪核 / 金色碎光 / 八向气泡 / 更慢消散</div></article>
+</section>
+<img src="oxygen_design.png" alt="氧元素子弹飞行八帧与两类爆炸动画逐帧设计总览">
+<footer>拖动任意滑杆可暂停并逐帧检查；点击继续恢复播放。飞行卡下方显示原尺寸（浏览器 100% 缩放）。透明 PNG、帧参数 oxygen.json 与设计说明位于本页同一目录。</footer>
+</main>
+<script>
+const definitions=[['normal',32,16,8,16,8],['charged',48,24,8,16,6],['impact',48,48,10,24,3],['charged_impact',64,64,12,24,3]];
+const assets=definitions.map(([id,w,h,count,fps,scale])=>{const image=new Image();image.src=`oxygen_${id}_strip.png`;return{id,w,h,count,fps,scale,image,manual:0}});
+const pauseButton=document.querySelector('#pause');let paused=false,time=0,last=null,mode='normal',shotStart=0;
+function pause(value){paused=value;pauseButton.textContent=paused?'继续动画':'暂停动画'}
+pauseButton.onclick=()=>pause(!paused);document.querySelector('#bg').onclick=()=>document.body.classList.toggle('light');
+for(const a of assets){document.getElementById(a.id+'Slider').oninput=e=>{if(!paused){for(const item of assets)item.manual=Number(document.getElementById(item.id+'Slider').value)}pause(true);a.manual=Number(e.target.value)}}
+function switchMode(value){mode=value;shotStart=time;document.querySelector('#normalMode').classList.toggle('active',mode==='normal');document.querySelector('#chargedMode').classList.toggle('active',mode==='charged')}
+document.querySelector('#normalMode').onclick=()=>switchMode('normal');document.querySelector('#chargedMode').onclick=()=>switchMode('charged');document.querySelector('#replay').onclick=()=>{shotStart=time;pause(false)};
+function setup(canvas){const width=Math.max(1,Math.round(canvas.getBoundingClientRect().width));if(canvas.width!==width)canvas.width=width;const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,canvas.width,canvas.height);return ctx}
+function stamp(ctx,a,frame,x,y,scale){if(frame<0||frame>=a.count||!a.image.complete||!a.image.naturalWidth)return;ctx.drawImage(a.image,frame*a.w,0,a.w,a.h,Math.round(x),Math.round(y),a.w*scale,a.h*scale)}
+function draw(canvas,a,frame,scale){const ctx=setup(canvas);scale=Math.min(scale,Math.max(1,Math.floor((canvas.width-8)/a.w)));stamp(ctx,a,frame,(canvas.width-a.w*scale)/2,(canvas.height-a.h*scale)/2,scale)}
+function scene(){const canvas=document.querySelector('#scene'),ctx=setup(canvas),a=assets.find(x=>x.id===mode),boom=assets.find(x=>x.id===(mode==='normal'?'impact':'charged_impact'));const local=(time-shotStart)%1.8,hitTime=.7,scale=2,impactX=canvas.width-64,cy=110;
+ctx.fillStyle=document.body.classList.contains('light')?'#5b718e':'#3b5272';ctx.fillRect(impactX+10,42,12,136);ctx.fillStyle='#55d9d3';ctx.fillRect(impactX+10,42,3,136);
+if(local<hitTime){const pivot=mode==='normal'?21:31,x=40+(impactX-40)*local/hitTime;stamp(ctx,a,Math.floor(local*a.fps)%a.count,x-pivot*scale,cy-a.h*scale/2,scale)}else stamp(ctx,boom,Math.floor((local-hitTime)*boom.fps),impactX-boom.w*scale/2,cy-boom.h*scale/2,scale);
+document.querySelector('#phase').textContent=local<hitTime?'飞行中 · 双球脉动与气流尾迹':local<hitTime+boom.count/boom.fps?'命中 · 闪光、气云、冲击环与碎泡':'爆炸结束 · 等待下一次发射'}
+function tick(now){if(last!==null&&!paused)time+=(now-last)/1000*Number(document.querySelector('#speed').value);last=now;for(const a of assets){const looping=a.id==='normal'||a.id==='charged';let frame=paused?a.manual:(looping?Math.floor(time*a.fps)%a.count:Math.min(a.count-1,Math.floor((time%1.2)*a.fps)));a.manual=frame;document.getElementById(a.id+'Slider').value=frame;document.getElementById(a.id+'Frame').textContent=`${frame+1} / ${a.count} 帧`;draw(document.getElementById(a.id),a,frame,a.scale);const actual=document.getElementById(a.id+'Actual');if(actual)draw(actual,a,frame,1)}scene();requestAnimationFrame(tick)}requestAnimationFrame(tick);
+</script>
+</html>

@@ -1,6 +1,25 @@
 extends CharacterBody2D
 
 const HERO_IDLE_TEXTURE = preload("res://assets/character/hero_idle_01.png")
+const HERO_IDLE_STRIP_TEXTURE = preload("res://assets/character/hero_idle_strip.png")
+const HERO_WALK_STRIP_TEXTURE = preload("res://assets/character/hero_walk_strip.png")
+const HERO_RUN_STRIP_TEXTURE = preload("res://assets/character/hero_run_strip.png")
+const HERO_JUMP_STRIP_TEXTURE = preload("res://assets/character/hero_jump_strip.png")
+const HERO_ATTACK_STRIP_TEXTURE = preload("res://assets/character/hero_attack_strip.png")
+const COMPRESSED_AIR_GUN = preload("res://compressed_air_gun.gd")
+const HERO_DISPLAY_SCALE := 2.0
+const WEAPON_DISPLAY_SCALE := 0.75
+const WEAPON_ANCHOR_X := 12.0
+const WEAPON_ANCHOR_Y := -10.0
+const IDLE_FRAME_COUNT := 4
+const MOTION_FRAME_COUNT := 6
+const JUMP_FRAME_COUNT := 9
+const ATTACK_FRAME_COUNT := 8
+const IDLE_FRAME_DURATION := 0.17
+const WALK_FRAME_DURATION := 0.12
+const RUN_FRAME_DURATION := 0.08
+const ATTACK_FRAME_DURATION := 0.06
+const LANDING_FRAME_DURATION := 0.12
 
 signal stability_changed(value: float, maximum: float)
 signal acid_requested(origin: Vector2, direction: Vector2)
@@ -16,6 +35,7 @@ signal charge_changed(value: float, maximum: float)
 signal attack_state_changed(message: String)
 
 const SPEED := 300.0
+const SPRINT_SPEED := 440.0
 const JUMP_VELOCITY := -620.0
 const MAX_STABILITY := 100.0
 const GRAVITY := 1500.0
@@ -57,6 +77,15 @@ var dash_timer := 0.0
 var dash_cooldown := 0.0
 var dash_direction := 1.0
 var hero_sprite: Sprite2D
+var weapon_visual: Node2D
+var animation_time := 0.0
+var sprinting := false
+var attack_animation_time := 0.0
+var attack_animation_active := false
+var airborne := false
+var jump_anticipation_time := 0.0
+var landing_animation_time := 0.0
+var last_compression_strength := 1.0
 
 func _ready() -> void:
 	add_to_group("player")
@@ -65,9 +94,16 @@ func _ready() -> void:
 	floor_snap_length = 6
 	process_mode = Node.PROCESS_MODE_PAUSABLE
 	hero_sprite = Sprite2D.new()
-	hero_sprite.texture = HERO_IDLE_TEXTURE
+	hero_sprite.texture = HERO_IDLE_STRIP_TEXTURE
+	hero_sprite.hframes = IDLE_FRAME_COUNT
+	hero_sprite.frame = 0
 	hero_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(hero_sprite)
+	weapon_visual = COMPRESSED_AIR_GUN.new()
+	weapon_visual.position = Vector2(WEAPON_ANCHOR_X, WEAPON_ANCHOR_Y * HERO_DISPLAY_SCALE)
+	weapon_visual.scale = Vector2(WEAPON_DISPLAY_SCALE, WEAPON_DISPLAY_SCALE)
+	weapon_visual.z_index = 1
+	add_child(weapon_visual)
 	_update_visuals()
 
 func _physics_process(delta: float) -> void:
@@ -103,13 +139,16 @@ func _physics_process(delta: float) -> void:
 	if not is_zero_approx(axis):
 		facing = signf(axis)
 	_update_crouch(climb_axis > 0 and active_ladder == null)
-	velocity.x = move_toward(velocity.x, axis * (130.0 if crouching else SPEED), (1800.0 if axis else 2200.0) * delta)
+	sprinting = Input.is_action_pressed("sprint") and is_on_floor() and absf(axis) > 0.01 and not crouching
+	var move_speed := SPRINT_SPEED if sprinting else (130.0 if crouching else SPEED)
+	velocity.x = move_toward(velocity.x, axis * move_speed, (1800.0 if axis else 2200.0) * delta)
 	coyote_remaining = 0.12 if is_on_floor() else maxf(0, coyote_remaining - delta)
 	jump_buffer = maxf(0, jump_buffer - delta)
 	if is_on_floor():
 		double_jump_available = true
 	if Input.is_action_just_pressed("jump"):
 		jump_buffer = 0.12
+		jump_anticipation_time = 0.08
 
 	var launched := not is_zero_approx(pending_spring_launch)
 	if launched:
@@ -149,6 +188,7 @@ func _physics_process(delta: float) -> void:
 			velocity.y *= 0.55
 
 	if Input.is_action_just_pressed("use_acid") and acid_cooldown <= 0:
+		_start_attack_animation()
 		_throw(false)
 	if Input.is_action_just_pressed("throw_item") and acid_cooldown <= 0:
 		_throw(true)
@@ -171,15 +211,19 @@ func _physics_process(delta: float) -> void:
 	if global_position.y > 900:
 		reset_to_spawn("fall")
 	_update_visuals()
+	_update_hero_animation(delta)
 	queue_redraw()
 
 func _process_oxygen_attacks(delta: float) -> void:
 	if Input.is_action_just_pressed("oxygen_normal"):
+		_start_attack_animation()
+		last_compression_strength = 1.0
 		oxygen_projectile_requested.emit(_attack_origin(), Vector2(facing, -0.04), 12.0, "normal")
 		attack_state_changed.emit("氧元素普攻：氧气弹")
 	if Input.is_action_just_pressed("oxygen_skill2"):
 		charging = true
 		charge_time = 0
+		_start_attack_animation()
 		attack_state_changed.emit("技能 2 蓄力中：松开 I 释放压缩氧核")
 	if charging:
 		charge_time = minf(MAX_CHARGE_TIME, charge_time + delta)
@@ -187,14 +231,17 @@ func _process_oxygen_attacks(delta: float) -> void:
 		# Releasing I while paused must also finish the charge after resuming.
 		if not Input.is_action_pressed("oxygen_skill2"):
 			var ratio := clampf(charge_time / MAX_CHARGE_TIME, 0.2, 1.0)
+			last_compression_strength = 1.0 + 3.0 * ratio
 			oxygen_projectile_requested.emit(_attack_origin(), Vector2(facing, -0.04), lerpf(22.0, 70.0, ratio), "charged")
 			gain_oxygen(12.0 + 18.0 * ratio)
 			attack_state_changed.emit("技能 2：压缩氧核 %.0f%%" % (ratio * 100))
 			charging = false
 			charge_time = 0
 			charge_changed.emit(0, MAX_CHARGE_TIME)
+			_start_attack_animation()
 	if Input.is_action_just_pressed("oxygen_skill"):
 		if skill_cooldown <= 0 and oxygen_energy >= SKILL_COST:
+			_start_attack_animation()
 			consume_oxygen(SKILL_COST)
 			skill_cooldown = SKILL_COOLDOWN
 			oxygen_pulse_requested.emit(global_position + Vector2(118 * facing, -8), 165.0, 34.0, "skill")
@@ -203,6 +250,7 @@ func _process_oxygen_attacks(delta: float) -> void:
 			attack_state_changed.emit("技能未就绪：需要 25 氧能量并等待冷却")
 	if Input.is_action_just_pressed("oxygen_ultimate"):
 		if oxygen_energy >= MAX_OXYGEN:
+			_start_attack_animation()
 			consume_oxygen(MAX_OXYGEN)
 			oxygen_pulse_requested.emit(global_position + Vector2(170 * facing, -12), 330.0, 120.0, "ultimate")
 			attack_state_changed.emit("大招：纯氧领域")
@@ -210,7 +258,60 @@ func _process_oxygen_attacks(delta: float) -> void:
 			attack_state_changed.emit("大招未就绪：氧能量需要充满")
 
 func _attack_origin() -> Vector2:
-	return global_position + Vector2(30 * facing, -10)
+	# compressed_air_gun.gd ends its barrel at local x=32; use that exact
+	# point so projectiles leave from the visible muzzle in either direction.
+	if weapon_visual:
+		return weapon_visual.to_global(Vector2(32.0, 0.0))
+	return global_position + Vector2(36.0 * facing, WEAPON_ANCHOR_Y * HERO_DISPLAY_SCALE)
+
+func _update_hero_animation(delta: float) -> void:
+	if not hero_sprite:
+		return
+	hero_sprite.flip_h = facing < 0
+	if weapon_visual:
+		var crouch_ratio := hero_sprite.scale.y / HERO_DISPLAY_SCALE
+		weapon_visual.position = Vector2(WEAPON_ANCHOR_X * facing, WEAPON_ANCHOR_Y * hero_sprite.scale.y)
+		weapon_visual.scale = Vector2(WEAPON_DISPLAY_SCALE * facing, WEAPON_DISPLAY_SCALE * crouch_ratio)
+		weapon_visual.set("charge_ratio", charge_time / MAX_CHARGE_TIME if charging else 0.0)
+		weapon_visual.queue_redraw()
+	if charging:
+		_set_hero_animation_texture(HERO_ATTACK_STRIP_TEXTURE, ATTACK_FRAME_COUNT)
+		hero_sprite.frame = 1 + mini(2, int(floor(clampf(charge_time / MAX_CHARGE_TIME, 0.0, 1.0) * 3.0)))
+		return
+	if attack_animation_active:
+		_set_hero_animation_texture(HERO_ATTACK_STRIP_TEXTURE, ATTACK_FRAME_COUNT)
+		attack_animation_time += delta
+		var attack_frame := int(floor(attack_animation_time / ATTACK_FRAME_DURATION))
+		if attack_frame < ATTACK_FRAME_COUNT:
+			hero_sprite.frame = attack_frame
+			return
+		attack_animation_active = false
+		attack_animation_time = 0.0
+	if not is_on_floor():
+		_set_hero_animation_texture(HERO_JUMP_STRIP_TEXTURE, JUMP_FRAME_COUNT)
+		hero_sprite.frame = 1 if velocity.y < -220 else 4 if velocity.y < 100 else 7
+		return
+	if absf(velocity.x) > 8.0 and dash_timer <= 0.0:
+		_set_hero_animation_texture(HERO_RUN_STRIP_TEXTURE if sprinting else HERO_WALK_STRIP_TEXTURE, MOTION_FRAME_COUNT)
+		animation_time += delta
+		hero_sprite.frame = int(floor(animation_time / (RUN_FRAME_DURATION if sprinting else WALK_FRAME_DURATION))) % MOTION_FRAME_COUNT
+	else:
+		# Keep the authored 32×48 idle frame as the stable standing pose;
+		# movement, jump and attack states use the multi-frame strips above.
+		_set_hero_animation_texture(HERO_IDLE_STRIP_TEXTURE, IDLE_FRAME_COUNT)
+		animation_time += delta
+		hero_sprite.frame = int(floor(animation_time / IDLE_FRAME_DURATION)) % IDLE_FRAME_COUNT
+
+func _set_hero_animation_texture(texture: Texture2D, frame_count: int) -> void:
+	if hero_sprite.texture == texture and hero_sprite.hframes == frame_count:
+		return
+	hero_sprite.texture = texture
+	hero_sprite.hframes = frame_count
+	hero_sprite.frame = 0
+
+func _start_attack_animation() -> void:
+	attack_animation_active = true
+	attack_animation_time = 0.0
 
 func gain_oxygen(amount: float) -> void:
 	oxygen_energy = clampf(oxygen_energy + amount, 0, MAX_OXYGEN)
@@ -227,6 +328,9 @@ func reset_combat() -> void:
 	skill_cooldown = 0
 	dash_timer = 0
 	dash_cooldown = 0
+	last_compression_strength = 1.0
+	attack_animation_active = false
+	attack_animation_time = 0.0
 	oxygen_energy_changed.emit(oxygen_energy, MAX_OXYGEN)
 	charge_changed.emit(0, MAX_CHARGE_TIME)
 
@@ -234,8 +338,11 @@ func _update_visuals() -> void:
 	if not hero_sprite:
 		return
 	hero_sprite.flip_h = facing < 0
-	hero_sprite.scale = Vector2(1, 0.6 if crouching else 1.0)
-	hero_sprite.position = Vector2(0, 26 - 24 * hero_sprite.scale.y)
+	var visual_scale_y := HERO_DISPLAY_SCALE * (0.6 if crouching else 1.0)
+	hero_sprite.scale = Vector2(HERO_DISPLAY_SCALE, visual_scale_y)
+	# The 48px source frame has a 24px half-height; keep its feet on the
+	# capsule's bottom edge (y = 26) at both standing and crouching heights.
+	hero_sprite.position = Vector2(0, 26 - 24 * visual_scale_y)
 	hero_sprite.modulate = Color(1.8, 1.8, 1.8) if damage_flash > 0 else Color.WHITE
 
 func _throw(aim_at_mouse: bool) -> void:
