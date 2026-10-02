@@ -1,5 +1,7 @@
 extends CharacterBody2D
 
+const HERO_IDLE_TEXTURE = preload("res://assets/character/hero_idle_01.png")
+
 signal stability_changed(value: float, maximum: float)
 signal acid_requested(origin: Vector2, direction: Vector2)
 signal oxygen_projectile_requested(origin: Vector2, direction: Vector2, damage: float, attack_kind: String)
@@ -31,10 +33,15 @@ var charging := false
 var skill_cooldown := 0.0
 var dash_timer := 0.0
 var dash_cooldown := 0.0
+var hero_sprite: Sprite2D
 
 func _ready() -> void:
 	add_to_group("player")
 	spawn_position = global_position
+	hero_sprite = Sprite2D.new()
+	hero_sprite.texture = HERO_IDLE_TEXTURE
+	hero_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	add_child(hero_sprite)
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
@@ -117,6 +124,8 @@ func _physics_process(delta: float) -> void:
 			attack_state_changed.emit("大招未就绪：氧能量需要充满")
 
 	move_and_slide()
+	if hero_sprite:
+		hero_sprite.flip_h = facing < 0.0
 	if global_position.y > 900.0:
 		reset_to_spawn()
 	queue_redraw()
@@ -158,13 +167,6 @@ func reset_to_spawn() -> void:
 	player_reset.emit()
 
 func _draw() -> void:
-	# Simple pixel-like researcher placeholder.
-	draw_rect(Rect2(-16, -26, 32, 40), Color("#f2c078"), true)
-	draw_rect(Rect2(-18, -31, 36, 12), Color("#dbe8ff"), true)
-	draw_rect(Rect2(-11, -27, 22, 7), Color("#344a69"), true)
-	draw_rect(Rect2(-14, 14, 11, 12), Color("#5e6ad2"), true)
-	draw_rect(Rect2(3, 14, 11, 12), Color("#5e6ad2"), true)
-	draw_circle(Vector2(10.0 * facing, -8.0), 3.0, Color("#74e0ce"))
 	if charging:
 		var charge_ratio := clampf(charge_time / MAX_CHARGE_TIME, 0.0, 1.0)
 		draw_arc(Vector2.ZERO, 32.0 + charge_ratio * 12.0, -PI * 0.8, PI * 0.8, 24, Color("#ffd76e"), 4.0)
