@@ -8,11 +8,12 @@ const WEIGHT_SCRIPT = preload("res://weight.gd")
 const SWITCH_SCRIPT = preload("res://switch.gd")
 const GATE_SCRIPT = preload("res://gate.gd")
 const LADDER_SCRIPT = preload("res://ladder.gd")
-const PLATFORM_SCRIPT = preload("res://moving_platform.gd")
 const MARKER_SCRIPT = preload("res://level_marker.gd")
 const WATER_SCRIPT = preload("res://water_trough.gd")
 const ELEMENTS = preload("res://element_catalog.gd")
 const MAGNET_SCRIPT = preload("res://magnet_receiver.gd")
+const PLATFORM_SCRIPT = preload("res://moving_platform.gd")
+const MUD_BLOB_SCRIPT = preload("res://dirt_mud_blob.gd")
 const GEOMETRY_SCRIPT = preload("res://level_geometry.gd")
 const AUDIO_SCRIPT = preload("res://lab_audio.gd")
 const ELEMENT_PROJECTILE_SCRIPT = preload("res://element_projectile.gd")
@@ -25,8 +26,8 @@ const BACKGROUND_TEXTURE = preload("res://assets/environment/tech_background.png
 const ZONE_WIDTH := 2048
 const LEVEL_WIDTH := ZONE_WIDTH * 3
 const CHECKPOINTS := [Vector2(120, 520), Vector2(2144, 584), Vector2(4192, 584)]
-const ZONE_NAMES := ["01  力学检修舱", "02  反应与相变舱", "03  平衡控制舱"]
-const OBJECTIVES := ["推配重到圆形压板，为吊台和隔离门供能", "酸蚀碳酸钙，冷却水槽，选择安全路线", "选择上层配重路线或下层酸蚀路线，解除出口锁"]
+const ZONE_NAMES := ["01  ?????", "02  ????", "03  ?????"]
+const OBJECTIVES := ["???????????????????????", "?????????????????????", "?????????????????"]
 const SAMPLE_COUNT := 9
 
 var player: CharacterBody2D
@@ -41,6 +42,7 @@ var build_parent: Node2D
 var objectives: Array[bool] = [false, false, false]
 var final_route := ""
 var samples: Dictionary = {}
+var zone_enemy_remaining := [0, 0, 0]
 var elapsed := 0.0
 var deaths := 0
 var resets := 0
@@ -49,6 +51,7 @@ var stability_bar: ProgressBar
 var oxygen_bar: ProgressBar
 var charge_bar: ProgressBar
 var combat_label: Label
+var ammo_label: Label
 var status_label: Label
 var objective_label: Label
 var stage_label: Label
@@ -131,6 +134,9 @@ func _create_player() -> void:
 	player.oxygen_energy_changed.connect(_on_oxygen_energy_changed)
 	player.charge_changed.connect(_on_charge_changed)
 	player.attack_state_changed.connect(_message)
+	player.weapon_fired.connect(audio.play_shot)
+	player.reload_finished.connect(audio.play_reload_complete)
+	audio.set_weapon_owner(player)
 	camera = Camera2D.new()
 	camera.position = Vector2(100, -120)
 	camera.position_smoothing_enabled = true
@@ -148,88 +154,63 @@ func _build_zone(index: int) -> void:
 	zone.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(zone)
 	zones[index] = zone
+	zone_enemy_remaining[index] = 0
 	build_parent = zone
 	_platform(Rect2(0, 96, ZONE_WIDTH, 32), Color("#243941"))
 	if index == 0:
-		_build_mechanics()
+		_build_intro()
 	elif index == 1:
 		_build_reactions()
 	else:
 		_build_finale()
 	_marker("Checkpoint%d" % index, Vector2(96, 580), Vector2(58, 80), "checkpoint", str(index))
 
-func _build_mechanics() -> void:
-	_platform(Rect2(0, 610, 960, 76))
-	_platform(Rect2(1440, 610, 608, 76))
+func _build_intro() -> void:
+	_platform(Rect2(0, 610, ZONE_WIDTH, 76))
 	_platform(Rect2(220, 475, 220, 24))
 	_platform(Rect2(515, 390, 180, 24))
 	_platform(Rect2(1440, 485, 144, 24))
 	_platform(Rect2(1640, 416, 128, 24))
 	_platform(Rect2(-32, 128, 32, 600))
 	_ladder("Ladder", Vector2(713, 500), 220)
-	_spring("SpringPlatform", Vector2(330, 466))
-	_weight("Counterweight", Vector2(608, 550))
-	pressure_switch = _switch("PressureSwitch", Vector2(800, 600))
-	gate = _gate("Gate", Vector2(1840, 369), Vector2(32, 482))
-	var lift := _moving("PulleyLift", Vector2(1120, 590), Vector2(0, -180))
-	var shuttle := _moving("GapShuttle", Vector2(1300, 418), Vector2(160, 0), true)
-	shuttle.platform_size = Vector2(144, 20)
-	pressure_switch.active_changed.connect(func(active: bool):
-		if not is_instance_valid(lift):
-			return
-		lift.set_active(active)
-		_on_switch_changed(active)
-	)
+	_mud_blob("MudBlob_0A", Vector2(760, 550), 0)
+	_mud_blob("MudBlob_0B", Vector2(1680, 550), 0)
 	_sample("m1", Vector2(310, 437))
 	_sample("m2", Vector2(604, 352))
 	_sample("m3", Vector2(1694, 376))
 
 func _build_reactions() -> void:
-	_platform(Rect2(0, 610, 900, 76))
-	_platform(Rect2(1400, 610, 648, 76))
-	# The overhead casing closes the jump bypass around the carbonate seal.
+	_platform(Rect2(0, 610, ZONE_WIDTH, 76))
 	_platform(Rect2(424, 128, 112, 342), Color("#34474b"))
-	rock = _rock("CarbonateRock", Vector2(480, 540), Vector2(96, 140))
-	var reaction_gate := _gate("ReactionGate", Vector2(1840, 369), Vector2(32, 482))
-	rock.dissolved.connect(func():
-		objectives[1] = true
-		reaction_gate.set_open(true)
-		_message("碳酸钙密封已解除。用蓝色胶囊冻结水槽，冰桥维持 6 秒。")
-		audio.play_cue("reaction")
-	)
 	_water("TeachingWater", Vector2(1150, 614), Vector2(500, 48))
 	_hazard("CorrosionHazard", Vector2(1540, 604), Vector2(240, 28))
 	_platform(Rect2(1436, 466, 160, 24))
 	_platform(Rect2(1664, 420, 128, 24))
-	# Optional training balcony; targets never block the main puzzle route.
 	_platform(Rect2(592, 470, 292, 20))
-	_oxygen_target("OxygenTarget0", Vector2(760, 436))
-	_oxygen_target("OxygenTarget1", Vector2(840, 436))
+	_mud_blob("MudBlob_1A", Vector2(720, 550), 1)
+	_mud_blob("MudBlob_1B", Vector2(1600, 550), 1)
+	_mud_blob("MudBlob_1C", Vector2(760, 430), 1)
 	_ladder("ReactionLadder", Vector2(1812, 515), 190)
 	_sample("c1", Vector2(668, 568))
 	_sample("c2", Vector2(1150, 480))
 	_sample("c3", Vector2(1728, 380))
 
 func _build_finale() -> void:
-	_platform(Rect2(0, 610, 560, 76))
+	_platform(Rect2(0, 610, ZONE_WIDTH, 76))
 	_platform(Rect2(480, 742, 160, 60))
 	_platform(Rect2(1120, 742, 256, 60))
 	_platform(Rect2(1376, 642, 152, 28))
-	_platform(Rect2(1536, 610, 512, 76))
 	_platform(Rect2(560, 360, 760, 24))
 	_platform(Rect2(1360, 438, 176, 24))
 	_platform(Rect2(1584, 512, 120, 24))
-	_moving("GravityLift", Vector2(476, 590), Vector2(0, -244))
-	_weight("FinalWeight", Vector2(664, 332))
-	var plate := _switch("FinalSwitch", Vector2(1096, 350))
-	var magnet := _sensor("Magnet", MAGNET_SCRIPT, Vector2(1232, 328), Vector2(64, 58))
-	plate.active_changed.connect(func(_active: bool): _try_physical_route())
-	magnet.locked.connect(_try_physical_route)
-	_water("FinalWater", Vector2(880, 744), Vector2(480, 48))
+	_water("FinalWater", Vector2(880, 744), Vector2(500, 48))
 	_platform(Rect2(1216, 480, 88, 156), Color("#34474b"))
-	var latch := _rock("ChemicalLatch", Vector2(1260, 690), Vector2(80, 104))
-	latch.dissolved.connect(func(): _choose_route("chemical"))
-	_gate("ExitGate", Vector2(1840, 369), Vector2(32, 482))
+	_hazard("FinalCorrosion", Vector2(1540, 604), Vector2(240, 28))
+	_mud_blob("MudBlob_2A", Vector2(720, 550), 2)
+	_mud_blob("MudBlob_2B", Vector2(1320, 550), 2)
+	_mud_blob("MudBlob_2C", Vector2(1660, 550), 2)
+	_mud_blob("MudBlob_2D", Vector2(1480, 400), 2)
+	_ladder("FinalLadder", Vector2(1500, 500), 190)
 	_marker("Exit", Vector2(1960, 554), Vector2(76, 108), "exit", "exit")
 	_sample("f1", Vector2(1000, 320))
 	_sample("f2", Vector2(880, 610))
@@ -268,55 +249,18 @@ func _ladder(node_name: String, pos: Vector2, height: float) -> void:
 	var ladder := _sensor(node_name, LADDER_SCRIPT, pos, Vector2(42, height))
 	ladder.ladder_height = height
 
-func _spring(node_name: String, pos: Vector2) -> void:
-	var spring := _sensor(node_name, SPRING_SCRIPT, pos, Vector2(128, 42))
-	var body := StaticBody2D.new()
-	_shape(body, Vector2(128, 18))
-	spring.add_child(body)
-
-func _weight(node_name: String, pos: Vector2) -> CharacterBody2D:
-	var weight := CharacterBody2D.new()
-	weight.name = node_name
-	weight.set_script(WEIGHT_SCRIPT)
-	weight.position = pos
-	_shape(weight, Vector2(56, 56))
-	build_parent.add_child(weight)
-	return weight
-
-func _switch(node_name: String, pos: Vector2) -> Area2D:
-	return _sensor(node_name, SWITCH_SCRIPT, pos, Vector2(108, 26))
-
-func _gate(node_name: String, pos: Vector2, size: Vector2) -> StaticBody2D:
-	var body := StaticBody2D.new()
-	body.name = node_name
-	body.set_script(GATE_SCRIPT)
-	body.gate_size = size
-	body.position = pos
-	_shape(body, size)
-	build_parent.add_child(body)
-	return body
-
-func _rock(node_name: String, pos: Vector2, size: Vector2) -> StaticBody2D:
-	var body := StaticBody2D.new()
-	body.name = node_name
-	body.set_script(ROCK_SCRIPT)
-	body.rock_size = size
-	body.position = pos
-	_shape(body, size)
-	build_parent.add_child(body)
-	return body
-
-func _moving(node_name: String, pos: Vector2, offset: Vector2, automatic := false) -> AnimatableBody2D:
-	var body := AnimatableBody2D.new()
-	body.name = node_name
-	body.set_script(PLATFORM_SCRIPT)
-	body.end_offset = offset
-	body.automatic = automatic
-	body.position = pos
-	_shape(body, Vector2(144, 20))
-	body.get_node("CollisionShape2D").one_way_collision = true
-	build_parent.add_child(body)
-	return body
+func _mud_blob(node_name: String, pos: Vector2, zone_index: int) -> CharacterBody2D:
+	var enemy := CharacterBody2D.new()
+	enemy.name = node_name
+	enemy.set_script(MUD_BLOB_SCRIPT)
+	enemy.position = pos
+	enemy.collision_layer = 1
+	enemy.collision_mask = 1
+	_shape(enemy, Vector2(34, 24))
+	build_parent.add_child(enemy)
+	zone_enemy_remaining[zone_index] += 1
+	enemy.connect("defeated", _on_mud_blob_defeated.bind(zone_index))
+	return enemy
 
 func _water(node_name: String, pos: Vector2, size: Vector2) -> Area2D:
 	var water := Area2D.new()
@@ -447,7 +391,6 @@ func _spawn_element_projectile(origin: Vector2, direction: Vector2, damage: floa
 	projectile.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(projectile)
 	projectile.add_to_group("projectiles")
-	audio.play_cue("throw")
 
 func _spawn_oxygen_pulse(origin: Vector2, radius: float, damage: float, kind: String) -> void:
 	if demo_complete or player.resetting or get_tree().paused:
@@ -468,7 +411,6 @@ func _spawn_oxygen_pulse(origin: Vector2, radius: float, damage: float, kind: St
 	pulse.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(pulse)
 	pulse.add_to_group("projectiles")
-	audio.play_cue("spring")
 
 func _on_oxygen_energy_changed(value: float, _maximum: float) -> void:
 	if oxygen_bar:
@@ -565,6 +507,8 @@ func _process(delta: float) -> void:
 		sample_label.text = "◇  %d / %d" % [samples.size(), SAMPLE_COUNT]
 		objective_label.text = OBJECTIVES[active_checkpoint]
 		combat_label.text = "U %.1fs" % player.skill_cooldown if player.skill_cooldown > 0 else "U / O %d" % player.oxygen_energy
+		ammo_label.text = "换弹 %.1fs" % player.reload_remaining[player.selected_element] if player.is_reloading() else "弹 %d / %d" % [player.magazine_ammo[player.selected_element], player.magazine_capacity()]
+		ammo_label.modulate = Color("#dfbd7d") if player.is_reloading() else Color.WHITE
 		for index in range(4):
 			var style := slots[index].get_theme_stylebox("panel") as StyleBoxFlat
 			style.border_color = ELEMENTS.TINTS[index] if index == player.selected_element else Color("#35545d")
@@ -651,6 +595,7 @@ func _build_ui() -> void:
 	oxygen_bar.show_percentage = false
 	_style_meter(oxygen_bar, Color("#8aceda"), Vector2(218, 8))
 	ui_layer.add_child(oxygen_bar)
+	ammo_label = _label("弹 12 / 12", Vector2(365, 29), 12, Color("#d7e9df"), ui_layer)
 	_label("I 蓄力", Vector2(366, 52), 12, Color("#dfbd7d"), ui_layer)
 	charge_bar = ProgressBar.new()
 	charge_bar.position = Vector2(365, 73)
@@ -680,7 +625,7 @@ func _build_ui() -> void:
 	objective_label = _label("", Vector2(40, 114), 16, Color("#d3bc8a"), ui_layer)
 	status_label = _label("", Vector2(40, 139), 15, Color("#9cddc2"), ui_layer)
 	_panel(Rect2(20, 621, 1112, 26), ui_layer)
-	_label("A/D 移动  W/S 梯子  S 趴下爬行  Q/E 切元素  J 普攻  K 跳跃  L 冲刺  U 技能  I 蓄力  O 大招  R 恢复  Tab 能力  Esc 暂停", Vector2(32, 624), 12, Color("#9db9b8"), ui_layer)
+	_label("A/D 移动  W 开始攀爬，S 在梯子上向下  S 趴下爬行  Q/E 切元素  J 普攻  K 跳跃  L 冲刺  U 技能  I 蓄力  O 大招  R 恢复  Tab 能力  Esc 暂停", Vector2(32, 624), 12, Color("#9db9b8"), ui_layer)
 	modal = _panel(Rect2(186, 165, 780, 418), ui_layer)
 	modal.mouse_filter = Control.MOUSE_FILTER_STOP
 	modal_title = _label("", Vector2(32, 24), 28, Color("#e6eddd"), modal)
@@ -701,7 +646,7 @@ func _show_modal(mode: String) -> void:
 		modal_primary.text = "再试另一条路线"
 	else:
 		modal_title.text = "基础能力" if mode == "skills" else "实验暂停"
-		modal_body.text = "Q 上一个 / E 下一个元素：氢 → 氧 → 碳 → 铁 → 氢。\n氢、氧使用压缩气枪；碳、铁使用固体发射器。\n\nJ 普攻；K 跳跃 / 二段跳；L 冲刺。\n按住 I，松开释放当前元素的蓄力弹。\nU 消耗 25 元素能量，冷却 4 秒；O 消耗 100 能量。\n氧使用范围冲击，其他元素使用三发 / 五发扇形射击。\n命中训练靶与蓄力释放补充能量，切换元素保留能量与冷却。\n\nA/D 移动，W/S 梯子，S 趴下爬行。\nR 恢复，Tab 能力面板，Esc 暂停。"
+		modal_body.text = "Q/E 上一个/下一个元素：氢 → 氧 → 碳 → 铁。\n氢/氧各 12 发，碳/铁各 6 发；打空自动换弹。\n气体换弹 1.2 秒，固体 0.8 秒；机械咔哒声提示换弹中。\n切换保留弹量，收起武器暂停换弹；换弹期间仍可移动。\n\nJ 普攻；K 跳跃/空中喷气；L 冲刺。I 按住蓄力，松开释放。\nJ/I 各耗 1 发；氧 U/O 各 1 发，其他元素 U/O 各 3/5 发。\nU 消耗 25 能量、冷却 4 秒；O 消耗 100 能量。\n弹量不足先换弹，不扣技能能量；命中与蓄力补充能量。\n\nA/D 移动，W/S 梯子，S 趴下。R 恢复，Tab 能力，Esc 暂停。"
 		modal_primary.text = "继续实验"
 
 func _close_modal() -> void:

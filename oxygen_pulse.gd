@@ -13,7 +13,10 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	elapsed += delta
 	for body in get_overlapping_bodies():
-		if body.has_method("take_oxygen_damage") and not hit_targets.has(body):
+		if body.has_method("take_element_damage") and not hit_targets.has(body):
+			hit_targets[body] = true
+			body.take_element_damage(damage, "oxygen", attack_kind)
+		elif body.has_method("take_oxygen_damage") and not hit_targets.has(body):
 			hit_targets[body] = true
 			body.take_oxygen_damage(damage, attack_kind)
 	if elapsed >= duration:

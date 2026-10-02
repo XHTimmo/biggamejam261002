@@ -12,6 +12,8 @@ $demoCases = @(
     @{ Name = 'progression'; Script = 'test_level_flow.gd'; Extra = @() },
     # Old throwable/gravity walkthrough is archived until the level is redesigned.
     @{ Name = 'elements'; Script = 'test_elements.gd'; Extra = @() },
+    @{ Name = 'magazines'; Script = 'test_magazines.gd'; Extra = @() },
+    @{ Name = 'weapon-audio'; Script = 'test_weapon_audio.gd'; Extra = @() },
     @{ Name = 'animation-states'; Script = 'test_animation_states.gd'; Extra = @() },
     @{ Name = 'combat'; Script = 'test_combat.gd'; Extra = @() },
     @{ Name = 'pixel-workbench'; Script = 'test_pixel_workbench.gd'; Extra = @() }
@@ -37,4 +39,4 @@ foreach ($demoCase in $demoCases) {
     }
     Write-Output ($demoOutput -split '\r?\n' | Where-Object { $_ -match '^PASS:' })
 }
-Write-Output 'PASS: all 7 demo verification scenarios'
+Write-Output 'PASS: all 9 demo verification scenarios'

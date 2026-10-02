@@ -37,6 +37,8 @@ signal oxygen_pulse_requested(origin: Vector2, radius: float, damage: float, att
 signal oxygen_energy_changed(value: float, maximum: float)
 signal charge_changed(value: float, maximum: float)
 signal attack_state_changed(message: String)
+signal weapon_fired(element: String, attack_kind: String)
+signal reload_finished(element: String)
 
 const SPEED := 300.0
 const SPRINT_SPEED := 440.0
@@ -62,8 +64,11 @@ var pending_spring_launch := 0.0
 var ladder_detach := 0.0
 var coyote_remaining := 0.0
 var jump_buffer := 0.0
-var double_jump_available := true
+var air_spray_available := true
+var air_spray_timer := 0.0
 var selected_element := 1 # Start with oxygen; all four elements are always available.
+var magazine_ammo: Array[int] = [12, 12, 6, 6]
+var reload_remaining: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var resetting := false
 var reset_reason := "manual"
 var crouching := false
@@ -111,6 +116,7 @@ func _physics_process(delta: float) -> void:
 		return
 	damage_flash = maxf(0, damage_flash - delta)
 	motion_clock += delta
+	air_spray_timer = maxf(0, air_spray_timer - delta)
 	ladder_detach = maxf(0, ladder_detach - delta)
 	skill_cooldown = maxf(0, skill_cooldown - delta)
 	dash_cooldown = maxf(0, dash_cooldown - delta)
@@ -121,6 +127,7 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("reset_demo"):
 		reset_to_spawn()
 		return
+	_advance_reload(delta)
 	if Input.is_action_just_pressed("previous_element"):
 		select_element(selected_element - 1)
 	if Input.is_action_just_pressed("next_element"):
@@ -137,7 +144,8 @@ func _physics_process(delta: float) -> void:
 	coyote_remaining = 0.12 if is_on_floor() else maxf(0, coyote_remaining - delta)
 	jump_buffer = maxf(0, jump_buffer - delta)
 	if is_on_floor():
-		double_jump_available = true
+		air_spray_available = true
+		air_spray_timer = 0.0
 	if Input.is_action_just_pressed("jump"):
 		jump_buffer = 0.12
 		jump_anticipation_time = 0.08
@@ -149,11 +157,20 @@ func _physics_process(delta: float) -> void:
 		active_ladder = null
 		is_climbing = false
 		coyote_remaining = 0
-		double_jump_available = true
+		air_spray_available = true
+		air_spray_timer = 0.0
 		ladder_detach = 0.25
-	if not launched and active_ladder and ladder_detach <= 0 and (is_climbing or absf(climb_axis) > 0.01):
+	# Horizontal input intentionally breaks the ladder attachment and lets
+	# gravity take over on the same frame.
+	if is_climbing and active_ladder and absf(axis) > 0.01:
+		is_climbing = false
+		active_ladder = null
+		velocity.y = 0.0
+		ladder_detach = 0.25
+	if not launched and active_ladder and ladder_detach <= 0 and (is_climbing or climb_axis < -0.01):
 		is_climbing = true
-		double_jump_available = true
+		air_spray_available = true
+		air_spray_timer = 0.0
 		# Keep the character centered on the ladder rails while climbing.
 		global_position.x = active_ladder.global_position.x
 		velocity.x = 0.0
@@ -171,10 +188,12 @@ func _physics_process(delta: float) -> void:
 		is_climbing = false
 		velocity.y = minf(velocity.y + GRAVITY * delta, 700)
 		if jump_buffer > 0 and not launched:
-			if coyote_remaining > 0 or double_jump_available:
+			if coyote_remaining > 0 or air_spray_available:
 				if coyote_remaining <= 0:
-					double_jump_available = false
+					air_spray_available = false
+					air_spray_timer = 0.22
 					velocity.y = -590
+					attack_state_changed.emit("空中喷气：二段助推")
 				else:
 					velocity.y = JUMP_VELOCITY
 				coyote_remaining = 0
@@ -201,13 +220,56 @@ func _physics_process(delta: float) -> void:
 	_update_hero_animation(delta)
 	queue_redraw()
 
+func is_reloading() -> bool:
+	return reload_remaining[selected_element] > 0.0
+
+func magazine_capacity() -> int:
+	return ELEMENTS.MAGAZINE_CAPACITY[selected_element]
+
+func _advance_reload(delta: float) -> void:
+	# Stowed magazines keep their progress; only the held weapon reloads.
+	if not is_reloading():
+		return
+	reload_remaining[selected_element] = maxf(0.0, reload_remaining[selected_element] - delta)
+	if not is_reloading():
+		magazine_ammo[selected_element] = magazine_capacity()
+		weapon_visual.set_reload_progress(-1.0)
+		attack_state_changed.emit(ELEMENTS.NAMES[selected_element] + "换弹完成")
+		reload_finished.emit(ELEMENTS.IDS[selected_element])
+
+func _start_reload() -> void:
+	if is_reloading():
+		return
+	reload_remaining[selected_element] = ELEMENTS.RELOAD_SECONDS[selected_element]
+	charging = false
+	charge_time = 0.0
+	charge_changed.emit(0, MAX_CHARGE_TIME)
+	weapon_visual.set_reload_progress(0.0)
+	attack_state_changed.emit("%s自动换弹 · %.1f 秒" % [ELEMENTS.NAMES[selected_element], reload_remaining[selected_element]])
+
+func _prepare_shot(count: int) -> bool:
+	if is_reloading():
+		return false
+	if magazine_ammo[selected_element] < count:
+		_start_reload()
+		return false
+	return true
+
+func _finish_shot() -> void:
+	if magazine_ammo[selected_element] == 0:
+		_start_reload()
+
 func _process_element_attacks(delta: float) -> void:
-	if Input.is_action_just_pressed("oxygen_normal"):
+	if is_reloading():
+		return
+	if Input.is_action_just_pressed("oxygen_normal") and _prepare_shot(1):
+		magazine_ammo[selected_element] -= 1
 		_start_attack_animation()
 		last_compression_strength = 1.0
 		_fire_element("normal", ELEMENTS.NORMAL_DAMAGE[selected_element])
 		attack_state_changed.emit(ELEMENTS.NAMES[selected_element] + "元素普攻：" + ELEMENTS.NORMAL_NAMES[selected_element])
-	if Input.is_action_just_pressed("oxygen_skill2"):
+		_finish_shot()
+	if Input.is_action_just_pressed("oxygen_skill2") and _prepare_shot(1):
 		charging = true
 		charge_time = 0
 		_start_attack_animation()
@@ -218,35 +280,49 @@ func _process_element_attacks(delta: float) -> void:
 		# Releasing I while paused must also finish the charge after resuming.
 		if not Input.is_action_pressed("oxygen_skill2"):
 			var ratio := clampf(charge_time / MAX_CHARGE_TIME, 0.2, 1.0)
-			last_compression_strength = 1.0 + 3.0 * ratio
-			_fire_element("charged", lerpf(ELEMENTS.NORMAL_DAMAGE[selected_element], ELEMENTS.CHARGED_DAMAGE[selected_element], ratio))
-			gain_oxygen(12.0 + 18.0 * ratio)
-			attack_state_changed.emit("%s %.0f%%" % [ELEMENTS.CHARGED_NAMES[selected_element], ratio * 100])
 			charging = false
 			charge_time = 0
 			charge_changed.emit(0, MAX_CHARGE_TIME)
-			_start_attack_animation()
+			if _prepare_shot(1):
+				magazine_ammo[selected_element] -= 1
+				last_compression_strength = 1.0 + 3.0 * ratio
+				_fire_element("charged", lerpf(ELEMENTS.NORMAL_DAMAGE[selected_element], ELEMENTS.CHARGED_DAMAGE[selected_element], ratio))
+				gain_oxygen(12.0 + 18.0 * ratio)
+				attack_state_changed.emit("%s %.0f%%" % [ELEMENTS.CHARGED_NAMES[selected_element], ratio * 100])
+				_start_attack_animation()
+				_finish_shot()
 	if Input.is_action_just_pressed("oxygen_skill"):
 		if skill_cooldown <= 0 and oxygen_energy >= SKILL_COST:
-			_start_attack_animation()
-			consume_oxygen(SKILL_COST)
-			skill_cooldown = SKILL_COOLDOWN
-			if selected_element == 1:
-				oxygen_pulse_requested.emit(global_position + Vector2(118 * facing, -8), 165.0, 34.0, "skill")
-			else:
-				_fire_fan(3, false)
-			attack_state_changed.emit("U：" + ELEMENTS.NAMES[selected_element] + "元素连发")
+			var cost := 1 if selected_element == 1 else 3
+			if _prepare_shot(cost):
+				# Commit the whole volley before emitting any projectiles or spending energy.
+				magazine_ammo[selected_element] -= cost
+				_start_attack_animation()
+				consume_oxygen(SKILL_COST)
+				skill_cooldown = SKILL_COOLDOWN
+				if selected_element == 1:
+					oxygen_pulse_requested.emit(global_position + Vector2(118 * facing, -8), 165.0, 34.0, "skill")
+					weapon_fired.emit("oxygen", "charged")
+				else:
+					_fire_fan(3, false)
+				attack_state_changed.emit("U：" + ELEMENTS.NAMES[selected_element] + "元素技能")
+				_finish_shot()
 		else:
 			attack_state_changed.emit("技能未就绪：需要 25 元素能量并等待冷却")
 	if Input.is_action_just_pressed("oxygen_ultimate"):
 		if oxygen_energy >= MAX_OXYGEN:
-			_start_attack_animation()
-			consume_oxygen(MAX_OXYGEN)
-			if selected_element == 1:
-				oxygen_pulse_requested.emit(global_position + Vector2(170 * facing, -12), 330.0, 120.0, "ultimate")
-			else:
-				_fire_fan(5, true)
-			attack_state_changed.emit("O：" + ELEMENTS.NAMES[selected_element] + "元素爆发")
+			var cost := 1 if selected_element == 1 else 5
+			if _prepare_shot(cost):
+				magazine_ammo[selected_element] -= cost
+				_start_attack_animation()
+				consume_oxygen(MAX_OXYGEN)
+				if selected_element == 1:
+					oxygen_pulse_requested.emit(global_position + Vector2(170 * facing, -12), 330.0, 120.0, "ultimate")
+					weapon_fired.emit("oxygen", "charged")
+				else:
+					_fire_fan(5, true)
+				attack_state_changed.emit("O：" + ELEMENTS.NAMES[selected_element] + "元素爆发")
+				_finish_shot()
 		else:
 			attack_state_changed.emit("大招未就绪：元素能量需要充满")
 
@@ -263,17 +339,20 @@ func select_element(index: int) -> void:
 	attack_state_changed.emit(ELEMENTS.NAMES[selected_element] + " · " + ELEMENTS.WEAPONS[selected_element])
 	queue_redraw()
 
-func _fire_element(kind: String, amount: float, angle := 0.0) -> void:
+func _fire_element(kind: String, amount: float, angle := 0.0, play_sound := true) -> void:
 	# Update the hand transform before sampling the muzzle on a turn-and-fire frame.
 	_update_hero_animation(0.0)
 	weapon_visual.fire()
 	element_projectile_requested.emit(_attack_origin(), Vector2(facing, -0.04).normalized().rotated(angle), amount, kind, ELEMENTS.IDS[selected_element])
+	if play_sound:
+		weapon_fired.emit(ELEMENTS.IDS[selected_element], kind)
 
 func _fire_fan(count: int, charged: bool) -> void:
 	last_compression_strength = 4.0 if charged else 1.0
 	for index in range(count):
 		var angle := (index - (count - 1) * 0.5) * 0.10
-		_fire_element("charged" if charged else "normal", ELEMENTS.CHARGED_DAMAGE[selected_element] if charged else ELEMENTS.NORMAL_DAMAGE[selected_element], angle)
+		_fire_element("charged" if charged else "normal", ELEMENTS.CHARGED_DAMAGE[selected_element] if charged else ELEMENTS.NORMAL_DAMAGE[selected_element], angle, false)
+	weapon_fired.emit(ELEMENTS.IDS[selected_element], "charged" if charged else "normal")
 
 func _attack_origin() -> Vector2:
 	return weapon_visual.to_global(weapon_visual.muzzle)
@@ -288,6 +367,7 @@ func _update_hero_animation(delta: float) -> void:
 		weapon_visual.position = Vector2(WEAPON_ANCHOR_X * facing, WEAPON_ANCHOR_Y * hero_sprite.scale.y)
 		weapon_visual.scale = Vector2(WEAPON_DISPLAY_SCALE * facing, WEAPON_DISPLAY_SCALE * crouch_ratio)
 		weapon_visual.set("charge_ratio", charge_time / MAX_CHARGE_TIME if charging else 0.0)
+		weapon_visual.set_reload_progress(1.0 - reload_remaining[selected_element] / ELEMENTS.RELOAD_SECONDS[selected_element] if is_reloading() else -1.0)
 		weapon_visual.queue_redraw()
 	if charging:
 		_set_hero_animation_texture(HERO_ATTACK_STRIP_TEXTURE, ATTACK_FRAME_COUNT)
@@ -347,6 +427,10 @@ func consume_oxygen(amount: float) -> void:
 	oxygen_energy_changed.emit(oxygen_energy, MAX_OXYGEN)
 
 func reset_combat() -> void:
+	magazine_ammo.assign(ELEMENTS.MAGAZINE_CAPACITY)
+	reload_remaining.fill(0.0)
+	if weapon_visual:
+		weapon_visual.set_reload_progress(-1.0)
 	oxygen_energy = MAX_OXYGEN
 	charging = false
 	charge_time = 0
@@ -393,7 +477,6 @@ func _update_crouch(wants_crouch: bool) -> void:
 func set_ladder(ladder: Area2D, entered: bool) -> void:
 	if entered and ladder_detach <= 0:
 		active_ladder = ladder
-		is_climbing = true
 		velocity.x = 0.0
 		global_position.x = ladder.global_position.x
 	elif active_ladder == ladder and not entered:
@@ -445,7 +528,8 @@ func reset_to_spawn(reason := "manual") -> void:
 	ladder_detach = 0.25
 	coyote_remaining = 0
 	jump_buffer = 0
-	double_jump_available = true
+	air_spray_available = true
+	air_spray_timer = 0.0
 	stability = MAX_STABILITY
 	reset_combat()
 	_update_crouch(false)
@@ -460,3 +544,11 @@ func _draw() -> void:
 	if charging:
 		var ratio := clampf(charge_time / MAX_CHARGE_TIME, 0, 1)
 		draw_arc(Vector2.ZERO, 32 + ratio * 12, -PI * 0.8, PI * 0.8, 24, Color("#ffd76e"), 3)
+	if air_spray_timer > 0:
+		var spray_ratio := air_spray_timer / 0.22
+		var spray_color := Color("#b7f2e6", 0.5 + spray_ratio * 0.5)
+		var spray_length := 34 + (1.0 - spray_ratio) * 8
+		draw_line(Vector2(-7, 22), Vector2(-10, spray_length), spray_color, 3)
+		draw_line(Vector2(7, 22), Vector2(10, spray_length), spray_color, 3)
+		draw_circle(Vector2(-10, spray_length), 3, spray_color)
+		draw_circle(Vector2(10, spray_length), 3, spray_color)

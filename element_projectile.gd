@@ -79,7 +79,13 @@ func _on_body_entered(body: Node2D) -> void:
 		return
 	if not ballistics.active:
 		return
-	if body.has_method("take_oxygen_damage"):
+	if body.has_method("take_element_damage"):
+		impacted = true
+		var impact_damage: float = damage * ballistics.energy_fraction()
+		body.take_element_damage(impact_damage, element, attack_kind, direction)
+		_spawn_impact()
+		queue_free()
+	elif body.has_method("take_oxygen_damage"):
 		impacted = true
 		# At close range the gas packet still delivers its calibrated muzzle
 		# energy. Further shots lose damage as coherence and speed decay.

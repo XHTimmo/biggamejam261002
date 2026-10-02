@@ -1,0 +1,136 @@
+{
+  "id": "EN-01",
+  "name": "脏脏泥团",
+  "name_en": "Dirty Mud Blob",
+  "role": "common_melee",
+  "threat_level": 1,
+  "introduced_in": "zone_01_training_lower_route",
+  "lore": "实验舱排污槽中的黏土、碳粉、铁屑和失控营养液混合后形成的拟生命体。它没有真正的意识，只会追逐热源、震动和新鲜氧气。",
+  "visual": {
+    "source_frame": [32, 32],
+    "display_scale": 2.0,
+    "silhouette": "low_side_view_blob",
+    "palette_roles": {
+      "outline": "#142238",
+      "mud_shadow": "#A85D3C",
+      "mud_body": "#D9854B",
+      "mud_highlight": "#F2C45F",
+      "sludge_accent": "#1F6874",
+      "core_glint": "#9AF5E5",
+      "warning": "#E05A60"
+    }
+  },
+  "combat": {
+    "max_health": 120.0,
+    "contact_damage": 18.0,
+    "move_speed": 70.0,
+    "acceleration": 540.0,
+    "detection_radius": 240.0,
+    "lose_target_radius": 420.0,
+    "body_size": [34, 24],
+    "hurtbox_size": [28, 22],
+    "attack": {
+      "range": 30.0,
+      "windup": 0.42,
+      "lunge_time": 0.24,
+      "lunge_speed": 210.0,
+      "recovery": 0.52,
+      "cooldown": 0.78,
+      "hit_cooldown": 0.48,
+      "can_hit_once_per_lunge": true
+    },
+    "movement_constraints": {
+      "uses_ladders": false,
+      "jumps": false,
+      "falls_from_ledges": true,
+      "water_slow_multiplier": 0.7,
+      "pushable": true
+    }
+  },
+  "element_response": {
+    "multiplier_note": "damage_multiplier below 1.0 means resistance; above 1.0 means weakness",
+    "hydrogen": {
+      "damage_multiplier": 0.80,
+      "normal_damage_from_catalog": 6.4,
+      "charged_damage_from_catalog": 16.0,
+      "status": "dispersed",
+      "status_duration": 0.55,
+      "knockback_multiplier": 1.25,
+      "description": "氢气从泥团孔隙中穿过，直接伤害偏低；高速气流会把它吹得短暂变薄并推离。"
+    },
+    "oxygen": {
+      "damage_multiplier": 1.10,
+      "normal_damage_from_catalog": 13.2,
+      "charged_damage_from_catalog": 77.0,
+      "status": "aerated",
+      "status_duration": 0.65,
+      "next_solid_hit_multiplier": 1.10,
+      "description": "氧气使潮湿泥团表层膨松，伤害略高；蓄力命中后暴露短暂的硬核缝隙。"
+    },
+    "carbon": {
+      "damage_multiplier": 0.65,
+      "normal_damage_from_catalog": 7.8,
+      "charged_damage_from_catalog": 16.9,
+      "status": "caked",
+      "status_duration": 1.10,
+      "move_speed_multiplier": 0.65,
+      "description": "碳粉与泥团成分相近，弹丸容易被吸收；沉积的碳粉会让表面结壳并减速。"
+    },
+    "iron": {
+      "damage_multiplier": 1.30,
+      "normal_damage_from_catalog": 23.4,
+      "charged_damage_from_catalog": 71.5,
+      "status": "staggered",
+      "status_duration": 0.45,
+      "stagger_chance": 0.35,
+      "description": "铁芯能刺穿泥团并撞击内部夹杂物，是最有效的直接破坏手段；命中有概率打断扑击。"
+    }
+  },
+  "state_machine": {
+    "states": ["idle", "notice", "approach", "windup", "lunge", "recovery", "staggered", "defeated"],
+    "transitions": [
+      "idle -> notice when player enters detection_radius",
+      "notice -> approach after 0.18s eye flash",
+      "approach -> windup when distance <= attack.range + 10",
+      "windup -> lunge after attack.windup",
+      "lunge -> recovery after attack.lunge_time or wall hit",
+      "recovery -> approach after attack.recovery",
+      "any_combat_state -> staggered on iron stagger or charged impact",
+      "any_state -> defeated when health <= 0"
+    ],
+    "telegraphs": {
+      "notice": "核心由暗橙变青白，身体上沿抖动两帧",
+      "windup": "身体向后压低，轮廓出现一条腐蚀红警示线，0.42 秒后扑击",
+      "lunge": "泥团拉成长条，前端亮橙，命中或撞墙后留下短暂泥点",
+      "staggered": "核心闪白三次，停止追踪和攻击"
+    }
+  },
+  "animation": {
+    "idle": {"frames": 6, "fps": 8, "loop": true, "beats": "呼吸起伏、核心每两帧闪一次"},
+    "move": {"frames": 8, "fps": 12, "loop": true, "beats": "左右底边交替挤压，泥点向后拖一像素"},
+    "notice": {"frames": 4, "fps": 12, "loop": false, "duration": 0.33, "beats": "眼核亮起、上沿抬高"},
+    "windup": {"frames": 5, "fps": 12, "loop": false, "duration": 0.42, "beats": "压低重心，腐蚀红警示线逐格出现"},
+    "lunge": {"frames": 5, "fps": 18, "loop": false, "duration": 0.28, "beats": "拉伸、前端触碰、回缩"},
+    "hurt": {"frames": 3, "fps": 15, "loop": false, "duration": 0.20, "beats": "轮廓白闪，受击侧凹陷"},
+    "defeated": {"frames": 8, "fps": 16, "loop": false, "duration": 0.50, "beats": "泥团塌陷、核心脱落、泥点落地"}
+  },
+  "drops": {
+    "sludge_residue": {"chance": 1.0, "quantity": 1, "effect": "restore_energy_8"},
+    "dirty_sample": {"chance": 0.25, "quantity": 1, "effect": "counts_as_lab_sample"}
+  },
+  "audio": {
+    "notice": "短促湿润吸气声",
+    "move": "低频黏脚声，每两步一次",
+    "attack": "挤压弹簧声后接湿泥拍击",
+    "hit": "按元素播放对应材质音，铁额外加入金属敲击",
+    "defeat": "泥浆落地声和一声短促的玻璃核心碰撞"
+  },
+  "encounter": {
+    "first_group_count": 1,
+    "repeat_group_count": 2,
+    "minimum_spawn_gap": 160.0,
+    "safe_intro_distance": 220.0,
+    "recommended_locations": ["zone_01_lower_floor", "zone_02_water_edge"],
+    "lesson": "先用氧气制造暴露窗口，再用铁造成高伤害；碳适合控速，氢适合推开和拉开距离。"
+  }
+}

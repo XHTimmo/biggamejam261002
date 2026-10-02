@@ -68,7 +68,8 @@ func _run() -> void:
 		player.select_element((index + 1) % 4)
 		_expect(player.oxygen_energy == 75 and player.skill_cooldown > 0, "Switch bypassed resource/cooldown")
 		player.select_element(index)
-		player.gain_oxygen(100)
+		# Exercise O independently with a full magazine and full energy.
+		player.reset_combat()
 		before = shots.size()
 		before_pulses = pulses
 		await _tap(KEY_O)

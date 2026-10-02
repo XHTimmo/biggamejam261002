@@ -8,6 +8,8 @@ const NORMAL_NAMES := ["氢泡弹", "氧气弹", "石墨散粒", "铁丸"]
 const CHARGED_NAMES := ["聚束氢环", "压缩氧核", "压制碳块", "致密铁芯"]
 const NORMAL_DAMAGE := [8.0, 12.0, 12.0, 18.0]
 const CHARGED_DAMAGE := [20.0, 70.0, 26.0, 55.0]
+const MAGAZINE_CAPACITY := [12, 12, 6, 6]
+const RELOAD_SECONDS := [1.2, 1.2, 0.8, 0.8]
 
 static func index_of(element: String) -> int:
 	return IDS.find(element)
