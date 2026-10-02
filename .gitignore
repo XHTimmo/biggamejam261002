@@ -1,0 +1,11 @@
+# Local engine binaries
+engine/
+
+# Godot-generated project data
+.godot/
+*.import
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+
