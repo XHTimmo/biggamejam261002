@@ -8,11 +8,17 @@ const WEIGHT_SCRIPT = preload("res://weight.gd")
 const SWITCH_SCRIPT = preload("res://switch.gd")
 const GATE_SCRIPT = preload("res://gate.gd")
 const ACID_SCRIPT = preload("res://acid_bottle.gd")
+const OXYGEN_PROJECTILE_SCRIPT = preload("res://oxygen_projectile.gd")
+const OXYGEN_PULSE_SCRIPT = preload("res://oxygen_pulse.gd")
+const TARGET_SCRIPT = preload("res://target_dummy.gd")
 
 var player: CharacterBody2D
 var stability_bar: ProgressBar
 var status_label: Label
 var objective_label: Label
+var attack_label: Label
+var oxygen_bar: ProgressBar
+var charge_bar: ProgressBar
 var gate: StaticBody2D
 var pressure_switch: Area2D
 var rock: StaticBody2D
@@ -42,6 +48,10 @@ func _ensure_input_actions() -> void:
 	_add_key_action("jump", KEY_UP)
 	_add_key_action("use_acid", KEY_Q)
 	_add_key_action("reset_demo", KEY_R)
+	_add_key_action("oxygen_normal", KEY_J)
+	_add_key_action("oxygen_charge", KEY_K)
+	_add_key_action("oxygen_skill", KEY_U)
+	_add_key_action("oxygen_ultimate", KEY_I)
 
 func _add_key_action(action: StringName, keycode: int) -> void:
 	if not InputMap.has_action(action):
@@ -73,6 +83,11 @@ func _build_world() -> void:
 	add_child(player)
 	player.stability_changed.connect(_on_stability_changed)
 	player.acid_requested.connect(_spawn_acid)
+	player.oxygen_projectile_requested.connect(_spawn_oxygen_projectile)
+	player.oxygen_pulse_requested.connect(_spawn_oxygen_pulse)
+	player.oxygen_energy_changed.connect(_on_oxygen_energy_changed)
+	player.charge_changed.connect(_on_charge_changed)
+	player.attack_state_changed.connect(_on_attack_state_changed)
 	player.player_reset.connect(_on_player_reset)
 	var camera := Camera2D.new()
 	camera.position = Vector2(0, -80)
@@ -160,6 +175,11 @@ func _build_world() -> void:
 	hazard.add_child(hazard_shape)
 	add_child(hazard)
 
+	# Oxygen-reactive training targets make the four attack tiers visible in the Demo.
+	_create_oxygen_target(Vector2(1070, 360))
+	_create_oxygen_target(Vector2(1260, 535))
+	_create_oxygen_target(Vector2(1460, 440))
+
 func _create_platform(rect: Rect2, color: Color) -> void:
 	var body := StaticBody2D.new()
 	body.position = rect.position + rect.size * 0.5
@@ -170,6 +190,24 @@ func _create_platform(rect: Rect2, color: Color) -> void:
 	body.add_child(shape_node)
 	add_child(body)
 	platform_visuals.append({"rect": rect, "color": color})
+
+func _create_oxygen_target(target_position: Vector2) -> void:
+	var target := StaticBody2D.new()
+	target.set_script(TARGET_SCRIPT)
+	target.position = target_position
+	var shape_node := CollisionShape2D.new()
+	var shape := RectangleShape2D.new()
+	shape.size = Vector2(50, 72)
+	shape_node.shape = shape
+	target.add_child(shape_node)
+	add_child(target)
+	target.damage_dealt.connect(_on_target_damage)
+
+func _on_target_damage(amount: float, _attack_kind: String) -> void:
+	if player:
+		player.gain_oxygen(minf(18.0, amount * 0.35))
+	if attack_label:
+		attack_label.text = "命中训练靶：+%.0f 氧能量" % minf(18.0, amount * 0.35)
 
 func _spawn_acid(origin: Vector2, direction: Vector2) -> void:
 	var bottle := Area2D.new()
@@ -183,12 +221,54 @@ func _spawn_acid(origin: Vector2, direction: Vector2) -> void:
 	bottle.add_child(shape_node)
 	add_child(bottle)
 
+func _spawn_oxygen_projectile(origin: Vector2, direction: Vector2, damage: float, attack_kind: String) -> void:
+	var projectile := Area2D.new()
+	projectile.set_script(OXYGEN_PROJECTILE_SCRIPT)
+	projectile.global_position = origin
+	projectile.direction = direction
+	projectile.damage = damage
+	projectile.attack_kind = attack_kind
+	var shape_node := CollisionShape2D.new()
+	var shape := CircleShape2D.new()
+	shape.radius = 22.0 if attack_kind == "charged" else 11.0
+	shape_node.shape = shape
+	projectile.add_child(shape_node)
+	add_child(projectile)
+
+func _spawn_oxygen_pulse(origin: Vector2, radius: float, damage: float, attack_kind: String) -> void:
+	var pulse := Area2D.new()
+	pulse.set_script(OXYGEN_PULSE_SCRIPT)
+	pulse.global_position = origin
+	pulse.radius = radius
+	pulse.damage = damage
+	pulse.attack_kind = attack_kind
+	var shape_node := CollisionShape2D.new()
+	var shape := CircleShape2D.new()
+	shape.radius = radius
+	shape_node.shape = shape
+	pulse.add_child(shape_node)
+	add_child(pulse)
+
 func _on_stability_changed(value: float, maximum: float) -> void:
 	if stability_bar:
 		stability_bar.value = value
 		stability_bar.tooltip_text = "稳态值 %.0f / %.0f" % [value, maximum]
 	if status_label and value < 40.0:
 		status_label.text = "警告：稳态值偏低，避开腐蚀区域！"
+
+func _on_oxygen_energy_changed(value: float, maximum: float) -> void:
+	if oxygen_bar:
+		oxygen_bar.value = value
+		oxygen_bar.tooltip_text = "氧能量 %.0f / %.0f" % [value, maximum]
+
+func _on_charge_changed(value: float, maximum: float) -> void:
+	if charge_bar:
+		charge_bar.value = value
+		charge_bar.max_value = maximum
+
+func _on_attack_state_changed(message: String) -> void:
+	if attack_label:
+		attack_label.text = message
 
 func _on_player_reset() -> void:
 	if status_label:
@@ -231,8 +311,41 @@ func _build_ui() -> void:
 	stability_text.add_theme_font_size_override("font_size", 16)
 	layer.add_child(stability_text)
 
+	oxygen_bar = ProgressBar.new()
+	oxygen_bar.position = Vector2(24, 91)
+	oxygen_bar.size = Vector2(280, 22)
+	oxygen_bar.min_value = 0.0
+	oxygen_bar.max_value = 100.0
+	oxygen_bar.value = 100.0
+	oxygen_bar.show_percentage = false
+	oxygen_bar.add_theme_color_override("font_color", Color("#ffffff"))
+	layer.add_child(oxygen_bar)
+
+	var oxygen_text := Label.new()
+	oxygen_text.position = Vector2(32, 91)
+	oxygen_text.text = "氧能量"
+	oxygen_text.add_theme_font_size_override("font_size", 15)
+	layer.add_child(oxygen_text)
+
+	charge_bar = ProgressBar.new()
+	charge_bar.position = Vector2(24, 119)
+	charge_bar.size = Vector2(280, 12)
+	charge_bar.min_value = 0.0
+	charge_bar.max_value = 1.4
+	charge_bar.value = 0.0
+	charge_bar.show_percentage = false
+	charge_bar.add_theme_color_override("font_color", Color("#ffffff"))
+	layer.add_child(charge_bar)
+
+	var charge_text := Label.new()
+	charge_text.position = Vector2(310, 114)
+	charge_text.text = "K 蓄力"
+	charge_text.add_theme_font_size_override("font_size", 13)
+	charge_text.add_theme_color_override("font_color", Color("#ffd76e"))
+	layer.add_child(charge_text)
+
 	objective_label = Label.new()
-	objective_label.position = Vector2(24, 105)
+	objective_label.position = Vector2(24, 149)
 	objective_label.text = "目标：推动配重 → 压下开关 → 用 Q 投掷盐酸溶解岩石"
 	objective_label.add_theme_font_size_override("font_size", 16)
 	objective_label.add_theme_color_override("font_color", Color("#f2d48f"))
@@ -240,17 +353,24 @@ func _build_ui() -> void:
 
 	var controls := Label.new()
 	controls.position = Vector2(24, 610)
-	controls.text = "A/D 或 ←/→ 移动    Space 跳跃    Q 投掷盐酸    R 重置"
+	controls.text = "A/D 移动  Space 跳跃  J 普攻  K 蓄力重击  U 技能  I 大招  Q 盐酸  R 重置"
 	controls.add_theme_font_size_override("font_size", 15)
 	controls.add_theme_color_override("font_color", Color("#b9c9e7"))
 	layer.add_child(controls)
 
 	status_label = Label.new()
-	status_label.position = Vector2(24, 142)
+	status_label.position = Vector2(24, 181)
 	status_label.text = "闸门关闭：推动橙色配重到绿色开关。"
 	status_label.add_theme_font_size_override("font_size", 16)
 	status_label.add_theme_color_override("font_color", Color("#8ce3b5"))
 	layer.add_child(status_label)
+
+	attack_label = Label.new()
+	attack_label.position = Vector2(24, 207)
+	attack_label.text = "氧元素攻击：J 普攻 · K 蓄力 · U 技能 · I 大招"
+	attack_label.add_theme_font_size_override("font_size", 15)
+	attack_label.add_theme_color_override("font_color", Color("#a4f4ff"))
+	layer.add_child(attack_label)
 
 func _draw() -> void:
 	# Cold-toned laboratory background.
